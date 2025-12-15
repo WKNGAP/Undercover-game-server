@@ -66,13 +66,6 @@ docker run --name undercover \
 
 Environment variables (e.g., `PORT=8080`) can be passed with `-e PORT=8080`. Mounting `data/` ensures question banks, room logs, and uploaded images survive container restarts.
 
-### Publishing the Image
-
-```bash
-docker tag undercover-game ghcr.io/<your-user>/undercover-game:latest
-docker push ghcr.io/<your-user>/undercover-game:latest
-```
-
 ## Deploying without Docker
 
 1. Install Node.js 20 on the server.
@@ -81,19 +74,6 @@ docker push ghcr.io/<your-user>/undercover-game:latest
 4. Run `PORT=8080 node server.js` behind a reverse proxy (NGINX/Caddy) with TLS.
 5. Configure process supervision (PM2, systemd, etc.) for resilience.
 
-## Uploading to GitHub
-
-1. Sign in to GitHub and create a new empty repository (no README/license). Copy the remote URL: `https://github.com/<user>/<repo>.git` or `git@github.com:<user>/<repo>.git`.
-2. From this project root:
-   ```bash
-   git init
-   git add .
-   git commit -m "Initial Undercover game server"
-   git branch -M main
-   git remote add origin <your-remote-url>
-   git push -u origin main
-   ```
-3. (Optional) Create release tags or enable GitHub Actions to build/push the Docker image automatically.
 
 ## Start-Server Helper
 
