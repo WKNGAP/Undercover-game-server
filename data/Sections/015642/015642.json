@@ -1,0 +1,78 @@
+{
+  "id": "015642",
+  "config": {
+    "totalPlayers": 4,
+    "spyCount": 1,
+    "blankCount": 1,
+    "type": "all"
+  },
+  "question": {
+    "id": "食物-6",
+    "wordA": "辣椒",
+    "wordB": "芥末",
+    "type": "食物"
+  },
+  "players": [
+    {
+      "id": "9b02771f-03e4-4033-90b6-5e9f2c4f9598",
+      "socketId": "TETMHWcdLzqeQM-qAAAd",
+      "name": "edge-normal",
+      "image": null,
+      "role": "Blank",
+      "word": "",
+      "isOut": true,
+      "vote": null,
+      "rng": 0.4626991920669328
+    },
+    {
+      "id": "6ab056fd-307a-4bae-a48c-d57206d37e70",
+      "socketId": "qNxEIryKT6nGOZRZAAAj",
+      "name": "Billy",
+      "image": null,
+      "role": "Spy",
+      "word": "芥末",
+      "isOut": false,
+      "vote": null,
+      "rng": 0.645989238343825
+    },
+    {
+      "id": "64f68a4f-25b8-4b79-9a4d-13b7ccfec352",
+      "socketId": "J4atFmDmCGDqFscXAAAf",
+      "name": "abc",
+      "image": null,
+      "role": "Civilian",
+      "word": "辣椒",
+      "isOut": false,
+      "vote": null,
+      "rng": 0.6759650958190861
+    },
+    {
+      "id": "380f95cd-b74f-4e71-8c59-772a4c458fc1",
+      "socketId": "XFUJhPy70sbpa_EXAAAb",
+      "name": "Firefox",
+      "image": null,
+      "role": "Civilian",
+      "word": "辣椒",
+      "isOut": false,
+      "vote": null,
+      "rng": 0.9320804243720169
+    }
+  ],
+  "state": "BLANK_GUESS",
+  "votes": {
+    "counts": {},
+    "voters": []
+  },
+  "createdAt": "2025-12-10T05:24:18.655Z",
+  "currentWords": {
+    "civilWord": "辣椒",
+    "spyWord": "芥末"
+  },
+  "blankGuess": {
+    "eligible": [
+      "9b02771f-03e4-4033-90b6-5e9f2c4f9598"
+    ],
+    "answers": {},
+    "target": "辣椒"
+  }
+}

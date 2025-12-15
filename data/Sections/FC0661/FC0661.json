@@ -1,0 +1,76 @@
+{
+  "id": "FC0661",
+  "config": {
+    "totalPlayers": 4,
+    "spyCount": 1,
+    "blankCount": 1,
+    "type": "all"
+  },
+  "question": {
+    "id": "食物-1",
+    "wordA": "燒肉",
+    "wordB": "火鍋",
+    "type": "食物"
+  },
+  "players": [
+    {
+      "id": "31a5cdaa-0087-4086-b2aa-f3c7ae3887a2",
+      "socketId": "ptfF170G88wl9imrAAAT",
+      "name": "abc",
+      "image": null,
+      "role": "Blank",
+      "word": "",
+      "isOut": true,
+      "pendingBlank": false,
+      "vote": null,
+      "rng": 0.04317765852759825
+    },
+    {
+      "id": "a7d35976-9307-4be0-a0af-f74a3d5fdd85",
+      "socketId": "UUTbfBwKzrojC-iEAAAP",
+      "name": "Fox",
+      "image": null,
+      "role": "Spy",
+      "word": "燒肉",
+      "isOut": false,
+      "pendingBlank": false,
+      "vote": null,
+      "rng": 0.12079309143862393
+    },
+    {
+      "id": "723429ba-7715-408c-980b-27ce87721c82",
+      "socketId": "xTL1kT-kgQEFnbqrAAAR",
+      "name": "edge-normal",
+      "image": null,
+      "role": "Civilian",
+      "word": "火鍋",
+      "isOut": false,
+      "pendingBlank": false,
+      "vote": null,
+      "rng": 0.3994804222979982
+    },
+    {
+      "id": "76305ba7-c2e0-4e8d-8590-e39d4e1e4568",
+      "socketId": "MRa1iFUCP2S6dX2PAAAN",
+      "name": "Firefox",
+      "image": null,
+      "role": "Civilian",
+      "word": "火鍋",
+      "isOut": false,
+      "pendingBlank": false,
+      "vote": null,
+      "rng": 0.8212389346876854
+    }
+  ],
+  "state": "GAMING",
+  "votes": {
+    "counts": {},
+    "voters": []
+  },
+  "createdAt": "2025-12-15T05:33:14.527Z",
+  "currentWords": {
+    "civilWord": "火鍋",
+    "spyWord": "燒肉"
+  },
+  "blankGuess": null
+}

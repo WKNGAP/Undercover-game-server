@@ -1,0 +1,71 @@
+{
+  "id": "9F90B7",
+  "config": {
+    "totalPlayers": 4,
+    "spyCount": 1,
+    "blankCount": 0,
+    "type": "all"
+  },
+  "question": {
+    "id": "食物-1",
+    "wordA": "燒肉",
+    "wordB": "火鍋",
+    "type": "食物"
+  },
+  "players": [
+    {
+      "id": "645e337d-90a1-4874-a6bf-a318ccc14c7d",
+      "socketId": "yA9H2lsUbR_P3VlDAAAh",
+      "name": "123",
+      "image": null,
+      "role": "Spy",
+      "word": "燒肉",
+      "isOut": false,
+      "vote": null,
+      "rng": 0.11569744840947216
+    },
+    {
+      "id": "4c9c2c6b-bdd1-4efe-8781-45fd0542dc69",
+      "socketId": "kkBCKXeyCBWj40CtAAAn",
+      "name": "nj",
+      "image": null,
+      "role": "Civilian",
+      "word": "火鍋",
+      "isOut": false,
+      "vote": null,
+      "rng": 0.20959191573497793
+    },
+    {
+      "id": "67153acc-56cd-4a55-961d-933f97d6f739",
+      "socketId": "AHlNA5SjTcbhinvqAAAj",
+      "name": "Billy",
+      "image": null,
+      "role": "Civilian",
+      "word": "火鍋",
+      "isOut": false,
+      "vote": null,
+      "rng": 0.7149233226617713
+    },
+    {
+      "id": "700319ca-d6b6-4092-a957-808cbc0b23f8",
+      "socketId": "ui3QjRQErBLl9N0SAAAz",
+      "name": "dd",
+      "image": null,
+      "role": "Civilian",
+      "word": "火鍋",
+      "isOut": true,
+      "vote": null,
+      "rng": 0.9117728788165347
+    }
+  ],
+  "state": "GAMING",
+  "votes": {
+    "counts": {},
+    "voters": []
+  },
+  "createdAt": "2025-12-14T03:41:32.441Z",
+  "currentWords": {
+    "civilWord": "火鍋",
+    "spyWord": "燒肉"
+  }
+}

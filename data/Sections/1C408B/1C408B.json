@@ -1,0 +1,71 @@
+{
+  "id": "1C408B",
+  "config": {
+    "totalPlayers": 4,
+    "spyCount": 1,
+    "blankCount": 1,
+    "type": "all"
+  },
+  "question": {
+    "id": "食物-5",
+    "wordA": "餅乾",
+    "wordB": "薯片",
+    "type": "食物"
+  },
+  "players": [
+    {
+      "id": "6b7067a8-415c-49b7-a8d5-a9c4e0acf170",
+      "socketId": "KsQw6JwPnnJL81BIAAAX",
+      "name": "Billy",
+      "image": null,
+      "role": "Blank",
+      "word": "",
+      "isOut": true,
+      "vote": null,
+      "rng": 0.09665949469799928
+    },
+    {
+      "id": "6b5b9ef5-1860-4018-98e7-db91d3b81698",
+      "socketId": "CF_OfEn6wDYNqT39AAAV",
+      "name": "Firefox",
+      "image": null,
+      "role": "Spy",
+      "word": "餅乾",
+      "isOut": false,
+      "vote": null,
+      "rng": 0.13633461029283667
+    },
+    {
+      "id": "01ba5419-ef62-4f3b-9a58-4a0e617072af",
+      "socketId": "63L0b45WHd2sYnPEAAAT",
+      "name": "edge-normal",
+      "image": null,
+      "role": "Civilian",
+      "word": "薯片",
+      "isOut": false,
+      "vote": null,
+      "rng": 0.4189600722198097
+    },
+    {
+      "id": "e649f647-b7c3-4441-a9ff-d150a44d7ea6",
+      "socketId": "WZQWeCYylPQX5QttAAAR",
+      "name": "abc",
+      "image": null,
+      "role": "Civilian",
+      "word": "薯片",
+      "isOut": false,
+      "vote": null,
+      "rng": 0.9363963185199613
+    }
+  ],
+  "state": "GAMING",
+  "votes": {
+    "counts": {},
+    "voters": []
+  },
+  "createdAt": "2025-12-10T05:14:57.933Z",
+  "currentWords": {
+    "civilWord": "薯片",
+    "spyWord": "餅乾"
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "id": "0A6A49",
+  "config": {
+    "totalPlayers": 4,
+    "spyCount": 1,
+    "blankCount": 1,
+    "type": "all"
+  },
+  "question": {
+    "id": "食物-8",
+    "wordA": "酸菜魚",
+    "wordB": "水煮魚",
+    "type": "食物"
+  },
+  "players": [
+    {
+      "id": "2862201f-490f-4a77-9670-809b603fb40c",
+      "socketId": "LIWb-nMQ2yAWad51AAAX",
+      "name": "Billy",
+      "image": "/sections/0A6A49/2862201f-490f-4a77-9670-809b603fb40c.jpg",
+      "role": "Blank",
+      "word": "",
+      "isOut": true,
+      "vote": null,
+      "rng": 0.07956745431279022
+    },
+    {
+      "id": "437d4987-6f4d-41f3-91b8-ef893cd4f666",
+      "socketId": "K-xHlctZ_KIffk0lAAAV",
+      "name": "Firefox",
+      "image": "/sections/0A6A49/437d4987-6f4d-41f3-91b8-ef893cd4f666.jpg",
+      "role": "Spy",
+      "word": "酸菜魚",
+      "isOut": false,
+      "vote": null,
+      "rng": 0.5112241627752105
+    },
+    {
+      "id": "252ae8a2-baaa-4233-9f86-c1be8be65397",
+      "socketId": "9d--1SCRuQW5fZJ7AAAT",
+      "name": "edge-normal",
+      "image": "/sections/0A6A49/252ae8a2-baaa-4233-9f86-c1be8be65397.jpg",
+      "role": "Civilian",
+      "word": "水煮魚",
+      "isOut": false,
+      "vote": null,
+      "rng": 0.5489025497622253
+    },
+    {
+      "id": "91cff712-2594-4bcc-b617-06e4f03b299a",
+      "socketId": "z0oilJQhI1as5rdfAAAR",
+      "name": "abc",
+      "image": "/sections/0A6A49/91cff712-2594-4bcc-b617-06e4f03b299a.jpg",
+      "role": "Civilian",
+      "word": "水煮魚",
+      "isOut": false,
+      "vote": null,
+      "rng": 0.7858846953340171
+    }
+  ],
+  "state": "GAMING",
+  "votes": {
+    "counts": {},
+    "voters": []
+  },
+  "createdAt": "2025-12-10T05:05:01.452Z",
+  "currentWords": {
+    "civilWord": "水煮魚",
+    "spyWord": "酸菜魚"
+  },
+  "blankGuess": {
+    "eligible": [
+      "91cff712-2594-4bcc-b617-06e4f03b299a"
+    ],
+    "answers": {
+      "91cff712-2594-4bcc-b617-06e4f03b299a": "麵"
+    },
+    "target": "泡麵"
+  }
+}

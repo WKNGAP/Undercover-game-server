@@ -1,0 +1,22 @@
+{
+  "id": "C70CA4",
+  "config": {
+    "totalPlayers": 4,
+    "spyCount": 1,
+    "blankCount": 1,
+    "type": "all"
+  },
+  "question": {
+    "id": "食物-3",
+    "wordA": "牛奶",
+    "wordB": "豆漿",
+    "type": "食物"
+  },
+  "players": [],
+  "state": "LOBBY",
+  "votes": {
+    "counts": {},
+    "voters": []
+  },
+  "createdAt": "2025-12-10T04:51:15.261Z"
+}

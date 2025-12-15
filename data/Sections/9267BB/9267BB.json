@@ -1,0 +1,78 @@
+{
+  "id": "9267BB",
+  "config": {
+    "totalPlayers": 4,
+    "spyCount": 1,
+    "blankCount": 1,
+    "type": "all"
+  },
+  "question": {
+    "id": "食物-0",
+    "wordA": "水餃",
+    "wordB": "鍋貼",
+    "type": "食物"
+  },
+  "players": [
+    {
+      "id": "225eb9ce-974a-49e1-8b48-3a21d274e873",
+      "socketId": "2vxRcE8raLE6ODJIAAAJ",
+      "name": "abc",
+      "image": null,
+      "role": "Blank",
+      "word": "",
+      "isOut": true,
+      "vote": null,
+      "rng": 0.17418925191090828
+    },
+    {
+      "id": "419a29de-712a-4ce6-8176-4de991348692",
+      "socketId": "ABosu2gPJt23X5WcAAAH",
+      "name": "edge-normal",
+      "image": null,
+      "role": "Spy",
+      "word": "水餃",
+      "isOut": false,
+      "vote": null,
+      "rng": 0.5110761673252988
+    },
+    {
+      "id": "c50929ba-7f33-4ff7-8635-ba71f768e4c6",
+      "socketId": "Dzw2XfiGen0OsOtqAAAD",
+      "name": "Firefox",
+      "image": null,
+      "role": "Civilian",
+      "word": "鍋貼",
+      "isOut": false,
+      "vote": null,
+      "rng": 0.8379516407117935
+    },
+    {
+      "id": "b677495a-050b-44f3-b57f-805eae3e7838",
+      "socketId": "PvrAotXyCSjngv5cAAAF",
+      "name": "fox",
+      "image": null,
+      "role": "Civilian",
+      "word": "鍋貼",
+      "isOut": false,
+      "vote": null,
+      "rng": 0.9545993974531932
+    }
+  ],
+  "state": "BLANK_GUESS",
+  "votes": {
+    "counts": {},
+    "voters": []
+  },
+  "createdAt": "2025-12-15T05:03:20.195Z",
+  "currentWords": {
+    "civilWord": "鍋貼",
+    "spyWord": "水餃"
+  },
+  "blankGuess": {
+    "eligible": [
+      "225eb9ce-974a-49e1-8b48-3a21d274e873"
+    ],
+    "answers": {},
+    "target": "鍋貼"
+  }
+}

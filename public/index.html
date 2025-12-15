@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Undercover Host</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; max-width: 1024px; }
+    h1 { margin-bottom: 8px; }
+    fieldset { margin-bottom: 16px; }
+    label { display: block; margin: 6px 0; }
+    input, select, button { padding: 6px 10px; margin-right: 6px; }
+    #qr { max-width: 200px; display: block; margin: 12px 0; }
+    .grid { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+    .grid li { border: 1px solid #ccc; padding: 10px; border-radius: 8px; text-align: center; }
+    .grid img { width: 160px; height: 160px; object-fit: cover; display: block; margin: 0 auto 6px; }
+    .status { padding: 8px 0; font-size: 24px; font-weight: bold; }
+    #endgame { font-size: 26px; font-weight: bold; margin-top: 8px; }
+    #outSection { margin-top: 16px; }
+    .vote-count { font-size: 12px; color: #555; }
+    .role-label { margin-top: 4px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1 id="title"></h1>
+
+  <fieldset>
+    <legend id="createRoomLabel"></legend>
+    <form id="createForm">
+      <label>
+        <span id="questionTypeLabel"></span>
+        <select id="typeSelect"></select>
+      </label>
+      <label>
+        <span id="totalPlayersLabel"></span>
+        <input type="number" id="totalPlayers" min="3" value="6" required>
+      </label>
+      <label>
+        <span id="spiesLabel"></span>
+        <input type="number" id="spyCount" min="1" value="1" required>
+      </label>
+      <label>
+        <span id="blanksLabel"></span>
+        <input type="number" id="blankCount" min="0" value="0" required>
+      </label>
+      <button type="submit" id="createBtn"></button>
+      <button type="button" id="startBtn" disabled></button>
+    </form>
+    <form id="uploadForm" enctype="multipart/form-data" style="margin-top:8px;">
+      <label>
+        <span id="uploadLabel"></span>
+        <input type="file" name="file" id="uploadInput" accept=".csv">
+      </label>
+    </form>
+  </fieldset>
+
+  <div class="status" id="status"></div>
+  <div id="roomLink"></div>
+  <img id="qr" alt="QR code" hidden>
+  <button id="voteStartBtn" disabled>開始投票</button>
+  <div id="endgame"></div>
+  <button id="restartSame" hidden>同班重開</button>
+  <button id="restartNew" hidden>重新開始</button>
+
+  <h3 id="lobbyHeading"></h3>
+  <ul id="lobbyAlive" class="grid"></ul>
+
+  <div id="outSection">
+    <h4>出局</h4>
+    <ul id="lobbyOut" class="grid"></ul>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    let dict = {};
+    let lang = 'zh';
+    let activeRoomId = null;
+    let currentPlayers = [];
+    let currentState = 'LOBBY';
+
+    function t(key) { return dict[lang]?.[key] || dict.zh?.[key] || key; }
+    function applyI18n() {
+      document.getElementById('title').textContent = t('title');
+      document.getElementById('createRoomLabel').textContent = t('createRoom');
+      document.getElementById('questionTypeLabel').textContent = t('questionType');
+      document.getElementById('totalPlayersLabel').textContent = t('totalPlayers');
+      document.getElementById('spiesLabel').textContent = t('spies');
+      document.getElementById('blanksLabel').textContent = t('blanks');
+      document.getElementById('createBtn').textContent = t('createRoom');
+      document.getElementById('startBtn').textContent = t('startGame');
+      document.getElementById('uploadLabel').textContent = t('uploadCSV');
+      document.getElementById('lobbyHeading').textContent = t('lobbyHeading');
+      document.getElementById('voteStartBtn').textContent = t('vote');
+    }
+
+    async function loadI18n() {
+      try {
+        const res = await fetch('/i18n.json');
+        dict = await res.json();
+        applyI18n();
+      } catch (e) {
+        console.error('Failed to load i18n', e);
+      }
+    }
+
+    async function loadTypes() {
+      const res = await fetch('/api/question-types');
+      const data = await res.json();
+      const select = document.getElementById('typeSelect');
+      select.innerHTML = '';
+      const any = document.createElement('option');
+      any.value = '';
+      any.textContent = t('defaultBank') || 'Default';
+      select.appendChild(any);
+      data.types.forEach(type => {
+        const opt = document.createElement('option');
+        opt.value = type;
+        opt.textContent = type;
+        select.appendChild(opt);
+      });
+    }
+
+    function roleLabel(role) {
+      if (!role) return '';
+      if (role === 'Spy') return t('roleSpy');
+      if (role === 'Blank') return t('roleBlank');
+      if (role === 'Civilian') return t('roleCivilian');
+      return role;
+    }
+
+    function renderLobby(payload = {}) {
+      if (payload.state) currentState = payload.state;
+      const state = currentState;
+      const players = payload?.players || [];
+      currentPlayers = players;
+      const joined = payload?.joined ?? players.length;
+      const aliveCount = players.filter(p => !p.isOut).length;
+      const total = payload?.total ?? Number(document.getElementById('totalPlayers').value);
+      const counts = payload?.counts;
+      const aliveList = document.getElementById('lobbyAlive');
+      const outList = document.getElementById('lobbyOut');
+      aliveList.innerHTML = '';
+      outList.innerHTML = '';
+      const showRole = state === 'FINISHED';
+      players.forEach(p => {
+        const li = document.createElement('li');
+        if (p.image) {
+          const img = document.createElement('img');
+          img.src = p.image;
+          img.alt = p.name;
+          li.appendChild(img);
+        }
+        const nameSpan = document.createElement('div');
+        nameSpan.textContent = `${p.name}${p.isOut ? ' (OUT)' : ''}`;
+        li.appendChild(nameSpan);
+        if (showRole && p.role) {
+          const roleSpan = document.createElement('div');
+          roleSpan.className = 'role-label';
+          roleSpan.textContent = roleLabel(p.role);
+          li.appendChild(roleSpan);
+        }
+        if (p.isOut) outList.appendChild(li); else aliveList.appendChild(li);
+      });
+      let statusText = `${t('totalPlayers')}: ${aliveCount}/${total}`;
+      document.getElementById('status').textContent = statusText;
+      document.getElementById('startBtn').disabled = !activeRoomId || state !== 'LOBBY' || joined !== total;
+      const voteDisabledStates = ['LOBBY', 'BLANK_GUESS', 'VOTING', 'FINISHED'];
+      document.getElementById('voteStartBtn').disabled = !activeRoomId || voteDisabledStates.includes(state);
+    }
+
+    document.getElementById('createForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const payload = {
+        type: document.getElementById('typeSelect').value || null,
+        totalPlayers: Number(document.getElementById('totalPlayers').value),
+        spyCount: Number(document.getElementById('spyCount').value),
+        blankCount: Number(document.getElementById('blankCount').value)
+      };
+      const res = await fetch('/api/create-room', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        document.getElementById('status').textContent = data.error || 'Failed to create room';
+        return;
+      }
+      activeRoomId = data.roomId;
+      document.getElementById('status').textContent = `${t('roomId')}: ${data.roomId}`;
+      document.getElementById('roomLink').textContent = data.url;
+      const qr = document.getElementById('qr');
+      qr.src = data.qr;
+      qr.hidden = false;
+      socket.emit('host_subscribe', { roomId: data.roomId });
+      document.getElementById('createForm').hidden = true;
+      document.getElementById('uploadForm').hidden = true;
+    });
+
+    document.getElementById('startBtn').addEventListener('click', () => {
+      if (!activeRoomId) return;
+      socket.emit('start_game', { roomId: activeRoomId });
+    });
+
+    document.getElementById('voteStartBtn').addEventListener('click', () => {
+      if (!activeRoomId) return;
+      socket.emit('start_vote', { roomId: activeRoomId });
+    });
+
+    document.getElementById('restartSame').addEventListener('click', () => {
+      if (!activeRoomId) return;
+      socket.emit('restart_game', { roomId: activeRoomId, keepPlayers: true });
+      document.getElementById('endgame').textContent = '';
+    });
+
+    document.getElementById('restartNew').addEventListener('click', () => {
+      if (!activeRoomId) return;
+      socket.emit('restart_game', { roomId: activeRoomId, keepPlayers: false });
+      document.getElementById('endgame').textContent = '';
+    });
+
+    document.getElementById('uploadInput').addEventListener('change', async () => {
+      const file = document.getElementById('uploadInput').files[0];
+      if (!file) return;
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/upload-question-bank', { method: 'POST', body: formData });
+      if (res.ok) {
+        loadTypes();
+        document.getElementById('status').textContent = t('uploadUpdated');
+      }
+    });
+
+    socket.on('update_lobby', (payload) => {
+      renderLobby(payload);
+      renderVotes(payload);
+    });
+
+    socket.on('game_started', ({ players }) => {
+      currentState = 'GAMING';
+      document.getElementById('status').textContent = t('gameStartedHost');
+      document.getElementById('qr').hidden = true;
+      document.getElementById('roomLink').textContent = '';
+      renderLobby({ players, state: 'GAMING', joined: players.length });
+      renderVotes({ votes: { counts: {} }, players });
+      document.getElementById('endgame').textContent = '';
+      document.getElementById('restartSame').hidden = true;
+      document.getElementById('restartNew').hidden = true;
+    });
+
+    socket.on('voting_complete', (data) => {
+      if (data.result?.result === 'blank_guess') currentState = 'BLANK_GUESS';
+      else if (data.result?.result === 'civil_win' || data.result?.result === 'spy_win' || data.result?.result === 'blank_win') currentState = 'FINISHED';
+      else currentState = 'GAMING';
+      if (data.status === 'tie') {
+        document.getElementById('status').textContent = t('tie');
+      } else if (data.status === 'out' && data.player) {
+        document.getElementById('status').textContent = `${data.player.name} ${t('playerOut')}`;
+      }
+      if (data.players) {
+        renderLobby({ players: data.players, joined: data.players.length, total: Number(document.getElementById('totalPlayers').value), counts: data.counts, votes: data.votes });
+      }
+      renderVotes(data);
+    });
+
+    socket.on('vote_update', (data) => {
+      renderVotes(data);
+    });
+
+    socket.on('game_over', (payload) => {
+      currentState = 'FINISHED';
+      let msg = '';
+      if (payload.result === 'civil_win') msg = t('civilianWin');
+      else if (payload.result === 'spy_win') msg = t('spyWin');
+      else if (payload.result === 'blank_guess') msg = t('blankGuessing');
+      else if (payload.result === 'blank_win') msg = `${t('blankWin')} ${payload.winnerProfiles?.map(p => p.name).join(', ') || ''}`;
+      document.getElementById('endgame').textContent = msg;
+      document.getElementById('restartSame').hidden = false;
+      document.getElementById('restartNew').hidden = false;
+      if (payload.finalRoles) {
+        currentPlayers = payload.finalRoles;
+        renderLobby({
+          players: payload.finalRoles,
+          joined: payload.finalRoles.length,
+          total: Number(document.getElementById('totalPlayers').value),
+          state: 'FINISHED'
+        });
+      } else {
+        renderLobby({ state: 'FINISHED', players: currentPlayers });
+      }
+    });
+
+    socket.on('blank_guess_start', () => {
+      currentState = 'BLANK_GUESS';
+      document.getElementById('status').textContent = t('blankGuessing');
+      document.getElementById('endgame').textContent = t('blankGuessing');
+      renderLobby({ players: currentPlayers, joined: currentPlayers.length, total: Number(document.getElementById('totalPlayers').value) });
+    });
+
+    socket.on('blank_guess_end', ({ state }) => {
+      currentState = state || 'GAMING';
+      document.getElementById('status').textContent = t('gameContinues');
+      document.getElementById('endgame').textContent = '';
+    });
+
+    socket.on('room_reset_host', () => {
+      currentState = 'LOBBY';
+      activeRoomId = null;
+      document.getElementById('createForm').hidden = false;
+      document.getElementById('uploadForm').hidden = false;
+      document.getElementById('lobbyAlive').innerHTML = '';
+      document.getElementById('lobbyOut').innerHTML = '';
+      document.getElementById('status').textContent = '等待建立新房間...';
+      document.getElementById('roomLink').textContent = '';
+      document.getElementById('qr').hidden = true;
+      document.getElementById('voteStartBtn').disabled = true;
+    });
+
+    function renderVotes(payload) {
+      const votes = payload?.votes?.counts || {};
+      const listItems = document.getElementById('lobbyAlive').children;
+      Array.from(listItems).forEach((li, idx) => {
+        const p = currentPlayers.filter(pp => !pp.isOut)[idx] || null;
+        const count = p && votes[p.id] ? votes[p.id] : 0;
+        let badge = li.querySelector('.vote-count');
+        if (!badge) {
+          badge = document.createElement('div');
+          badge.className = 'vote-count';
+          li.appendChild(badge);
+        }
+        badge.textContent = `Votes: ${count}`;
+      });
+    }
+
+    loadI18n();
+    loadTypes();
+  </script>
+</body>
+</html>

@@ -1,0 +1,97 @@
+{
+  "id": "80A694",
+  "config": {
+    "totalPlayers": 6,
+    "spyCount": 1,
+    "blankCount": 0,
+    "type": "all"
+  },
+  "question": {
+    "id": "食物-4",
+    "wordA": "麵包",
+    "wordB": "蛋糕",
+    "type": "食物"
+  },
+  "players": [
+    {
+      "id": "e57f47e6-2f11-43be-ab3b-03bde7adb94e",
+      "socketId": "OLUpWc1Gri01GOr8AACO",
+      "name": "Alice",
+      "image": "/sections/80A694/e57f47e6-2f11-43be-ab3b-03bde7adb94e.jpg",
+      "role": "Spy",
+      "word": "蛋糕",
+      "isOut": false,
+      "vote": null,
+      "rng": 0.17231287415623364
+    },
+    {
+      "id": "7d79ec18-338b-402c-bb6d-8861a176f71d",
+      "socketId": "bVPnkOrJ4YTbj6RVAACe",
+      "name": "Lilin",
+      "image": "/sections/80A694/7d79ec18-338b-402c-bb6d-8861a176f71d.jpg",
+      "role": "Civilian",
+      "word": "麵包",
+      "isOut": false,
+      "vote": null,
+      "rng": 0.38679477281580277
+    },
+    {
+      "id": "ba20544b-fe21-41de-86cd-37ad979ba522",
+      "socketId": "dY-8v5GWkvls4iV1AACY",
+      "name": "Allen",
+      "image": "/sections/80A694/ba20544b-fe21-41de-86cd-37ad979ba522.jpg",
+      "role": "Civilian",
+      "word": "麵包",
+      "isOut": false,
+      "vote": null,
+      "rng": 0.4084382604152359
+    },
+    {
+      "id": "fe3d3ae6-ef03-43ee-9066-66137ea014b4",
+      "socketId": "kJ_yOMx-81V-Ij6YAABu",
+      "name": "Adam",
+      "image": "/sections/80A694/fe3d3ae6-ef03-43ee-9066-66137ea014b4.jpg",
+      "role": "Civilian",
+      "word": "麵包",
+      "isOut": false,
+      "vote": null,
+      "rng": 0.5405053692799175
+    },
+    {
+      "id": "7064bee9-b198-427d-9b1b-8f9c206ef0dd",
+      "socketId": "0HNc7iN2uaUPEyTjAABc",
+      "name": "Mizuki",
+      "image": "/sections/80A694/7064bee9-b198-427d-9b1b-8f9c206ef0dd.jpg",
+      "role": "Civilian",
+      "word": "麵包",
+      "isOut": false,
+      "vote": null,
+      "rng": 0.6863090189295715
+    },
+    {
+      "id": "1ea81ac5-78d9-4435-8869-f3794680659a",
+      "socketId": "ucT2j16rfhANPwGJAABq",
+      "name": "Billy",
+      "image": "/sections/80A694/1ea81ac5-78d9-4435-8869-f3794680659a.jpg",
+      "role": "Civilian",
+      "word": "麵包",
+      "isOut": false,
+      "vote": null,
+      "rng": 0.6964573374214638
+    }
+  ],
+  "state": "VOTING",
+  "votes": {
+    "counts": {
+      "1ea81ac5-78d9-4435-8869-f3794680659a": 1
+    },
+    "voters": [
+      "7064bee9-b198-427d-9b1b-8f9c206ef0dd"
+    ]
+  },
+  "createdAt": "2025-12-14T03:32:19.459Z",
+  "currentWords": {
+    "civilWord": "麵包",
+    "spyWord": "蛋糕"
+  }
+}

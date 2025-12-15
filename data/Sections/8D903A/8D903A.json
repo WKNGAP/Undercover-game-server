@@ -1,0 +1,78 @@
+{
+  "id": "8D903A",
+  "config": {
+    "totalPlayers": 4,
+    "spyCount": 1,
+    "blankCount": 1,
+    "type": "all"
+  },
+  "question": {
+    "id": "食物-7",
+    "wordA": "餃子",
+    "wordB": "包子",
+    "type": "食物"
+  },
+  "players": [
+    {
+      "id": "aeb6b0ea-ca23-4432-9dcf-d9b6b242fede",
+      "socketId": "AcuqX3Y5IXN5XZq1AAAT",
+      "name": "Billy",
+      "image": "/sections/8D903A/aeb6b0ea-ca23-4432-9dcf-d9b6b242fede.jpg",
+      "role": "Blank",
+      "word": "",
+      "isOut": true,
+      "vote": null,
+      "rng": 0.061220711484827106
+    },
+    {
+      "id": "b99300f9-f80c-4911-9caf-ee7f8bdde5a0",
+      "socketId": "6tUUCziB6iYdfc7EAAAN",
+      "name": "edge-normal",
+      "image": "/sections/8D903A/b99300f9-f80c-4911-9caf-ee7f8bdde5a0.jpg",
+      "role": "Spy",
+      "word": "餃子",
+      "isOut": false,
+      "vote": null,
+      "rng": 0.3287322873577003
+    },
+    {
+      "id": "35ded5da-6990-421f-bacc-baff73c5f529",
+      "socketId": "SZTfT5sCah9-Nyp7AAAL",
+      "name": "Firefox",
+      "image": "/sections/8D903A/35ded5da-6990-421f-bacc-baff73c5f529.jpg",
+      "role": "Civilian",
+      "word": "包子",
+      "isOut": false,
+      "vote": null,
+      "rng": 0.7850744218765968
+    },
+    {
+      "id": "4e73748b-2d12-419d-a82a-60c2218796ba",
+      "socketId": "dMVKqW-Yc0esYjAKAAAP",
+      "name": "abc",
+      "image": "/sections/8D903A/4e73748b-2d12-419d-a82a-60c2218796ba.jpg",
+      "role": "Civilian",
+      "word": "包子",
+      "isOut": false,
+      "vote": null,
+      "rng": 0.8412857584406948
+    }
+  ],
+  "state": "GAMING",
+  "votes": {
+    "counts": {},
+    "voters": []
+  },
+  "createdAt": "2025-12-10T04:17:13.956Z",
+  "currentWords": {
+    "civilWord": "包子",
+    "spyWord": "餃子"
+  },
+  "blankGuess": {
+    "eligible": [
+      "4e73748b-2d12-419d-a82a-60c2218796ba"
+    ],
+    "answers": {},
+    "target": "火鍋"
+  }
+}

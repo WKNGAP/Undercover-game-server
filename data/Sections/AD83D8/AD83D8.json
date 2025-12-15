@@ -1,0 +1,96 @@
+{
+  "id": "AD83D8",
+  "config": {
+    "totalPlayers": 4,
+    "spyCount": 1,
+    "blankCount": 1,
+    "type": "all"
+  },
+  "question": {
+    "id": "食物-1",
+    "wordA": "燒肉",
+    "wordB": "火鍋",
+    "type": "食物"
+  },
+  "players": [
+    {
+      "id": "148a7ee4-a296-4c48-9837-d7f0679175db",
+      "socketId": "VauY2GcvvDKJR_loAAAP",
+      "name": "fox",
+      "image": null,
+      "role": "Blank",
+      "word": "",
+      "isOut": false,
+      "pendingBlank": false,
+      "vote": null,
+      "rng": 0.019600952857372178
+    },
+    {
+      "id": "ced5a288-08be-4e1b-ba26-0a44d1bb7659",
+      "socketId": "tAtj9BZ6Dftx37mOAAAR",
+      "name": "edge-normal",
+      "image": null,
+      "role": "Spy",
+      "word": "火鍋",
+      "isOut": false,
+      "pendingBlank": false,
+      "vote": null,
+      "rng": 0.355387834137618
+    },
+    {
+      "id": "62ccd818-eeb2-4c5f-968f-23caef877f37",
+      "socketId": "e3CS2x0IvJ4K9qj6AAAT",
+      "name": "abc",
+      "image": null,
+      "role": "Civilian",
+      "word": "燒肉",
+      "isOut": false,
+      "pendingBlank": false,
+      "vote": null,
+      "rng": 0.5399449255833786
+    },
+    {
+      "id": "0c5231e7-85df-4f3a-956b-3a8bb191203e",
+      "socketId": "qCP7JFW0XvzLlH4EAAAN",
+      "name": "Firefox",
+      "image": null,
+      "role": "Civilian",
+      "word": "燒肉",
+      "isOut": false,
+      "pendingBlank": false,
+      "vote": null,
+      "rng": 0.9150609129761844
+    }
+  ],
+  "state": "GAMING",
+  "votes": {
+    "counts": {},
+    "voters": []
+  },
+  "createdAt": "2025-12-15T06:25:36.767Z",
+  "usedQuestionIds": [
+    "食物-6",
+    "食物-1"
+  ],
+  "questionHistory": [
+    {
+      "id": "食物-6",
+      "type": "食物",
+      "wordA": "辣椒",
+      "wordB": "芥末",
+      "usedAt": "2025-12-15T06:26:04.618Z"
+    },
+    {
+      "id": "食物-1",
+      "type": "食物",
+      "wordA": "燒肉",
+      "wordB": "火鍋",
+      "usedAt": "2025-12-15T06:26:42.434Z"
+    }
+  ],
+  "currentWords": {
+    "civilWord": "燒肉",
+    "spyWord": "火鍋"
+  },
+  "blankGuess": null
+}

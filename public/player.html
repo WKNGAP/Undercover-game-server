@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>玩家加入</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; }
+    label { display: block; margin: 8px 0; }
+    button { padding: 8px 12px; }
+    #wordBox { margin-top: 12px; font-size: 24px; font-weight: bold; }
+    #voteStatus, #joinStatus { font-size: 22px; font-weight: bold; }
+    #roleReveal { font-size: 22px; font-weight: bold; margin-top: 6px; }
+    #voteCards { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+    .card { border: 1px solid #ccc; border-radius: 8px; padding: 10px; text-align: center; }
+    .card img { width: 140px; height: 140px; object-fit: cover; display: block; margin: 0 auto 6px; }
+  </style>
+</head>
+<body>
+  <h1 id="pageTitle"></h1>
+  <div id="roomInfo"></div>
+  <div id="playerName"></div>
+  <form id="joinForm">
+    <label id="nameLabel"></label>
+    <input type="text" id="nameInput" placeholder="">
+    <label id="photoLabel"></label>
+    <input type="file" id="photoInput" accept="image/*">
+    <progress id="uploadProgress" value="0" max="100" style="display:none; width:100%;"></progress>
+    <button type="submit" id="joinBtn"></button>
+    <div id="photoPreview"></div>
+  </form>
+  <div id="wordBox"></div>
+  <div id="roleReveal"></div>
+  <div id="joinStatus"></div>
+  <div id="countStatus"></div>
+  <div id="votePanel" hidden>
+    <div id="voteCards"></div>
+    <button id="voteBtn"></button>
+    <div id="voteStatus"></div>
+  </div>
+  <div id="blankGuessPanel" hidden>
+    <label id="blankGuessLabel">白板猜題</label>
+    <input type="text" id="blankGuessInput" placeholder="輸入平民詞語">
+    <button id="blankGuessBtn">送出</button>
+  </div>
+  <button id="leaveBtn" hidden>離開</button>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    let currentRoomId = window.location.pathname.split('/').pop();
+    let playerId = null;
+    let dict = {};
+    let lang = 'zh';
+    let storageKey = `undercover-${currentRoomId}`;
+    const uploadProgress = document.getElementById('uploadProgress');
+    let currentTargets = [];
+    let blankGuessing = false;
+    let playerOut = false;
+    let playerRole = null;
+    const statusElem = document.getElementById('voteStatus');
+    const roleReveal = document.getElementById('roleReveal');
+
+    function t(key) {
+      return dict[lang]?.[key] || dict.zh?.[key] || key;
+    }
+
+    function applyI18n() {
+      document.getElementById('pageTitle').textContent = t('playerJoinTitle');
+      document.getElementById('roomInfo').textContent = `${t('roomId')}: ${currentRoomId}`;
+      document.getElementById('nameLabel').textContent = t('name');
+      document.getElementById('nameInput').placeholder = t('name');
+      document.getElementById('photoLabel').textContent = t('photoOptional');
+      document.getElementById('joinBtn').textContent = t('join');
+      document.getElementById('voteBtn').textContent = t('vote');
+      document.getElementById('blankGuessBtn').textContent = '送出';
+      document.getElementById('blankGuessLabel').textContent = t('blankGuessing');
+    }
+
+    async function loadI18n() {
+      try {
+        const res = await fetch('/i18n.json');
+        dict = await res.json();
+        applyI18n();
+      } catch (e) {
+        console.error('Failed to load i18n', e);
+      }
+    }
+
+    function compressImage(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onprogress = (e) => {
+          if (e.lengthComputable) {
+            uploadProgress.style.display = 'block';
+            uploadProgress.value = Math.round((e.loaded / e.total) * 100);
+          }
+        };
+        reader.onload = () => {
+          const img = new Image();
+          img.onload = () => {
+            const max = 512;
+            let { width, height } = img;
+            if (width > height && width > max) {
+              height = Math.round(height * (max / width));
+              width = max;
+            } else if (height > width && height > max) {
+              width = Math.round(width * (max / height));
+              height = max;
+            } else if (width > max) {
+              width = height = max;
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+            resolve(dataUrl);
+          };
+          img.onerror = reject;
+          img.src = reader.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function roleLabel(role) {
+      if (!role) return '';
+      if (role === 'Spy') return t('roleSpy');
+      if (role === 'Blank') return t('roleBlank');
+      if (role === 'Civilian') return t('roleCivilian');
+      return role;
+    }
+
+    function updateRoleReveal() {
+      const text = roleLabel(playerRole);
+      roleReveal.textContent = text || '';
+    }
+
+    function renderVoteCards(players) {
+      if (playerOut) {
+        document.getElementById('votePanel').hidden = true;
+        return;
+      }
+      const container = document.getElementById('voteCards');
+      container.innerHTML = '';
+      currentTargets = [];
+      if (!players || !players.length) {
+        document.getElementById('votePanel').hidden = true;
+        return;
+      }
+      players.forEach(p => {
+        if (p.id === playerId || p.isOut) return;
+        const card = document.createElement('div');
+        card.className = 'card';
+        if (p.image) {
+          const img = document.createElement('img');
+          img.src = p.image;
+          img.alt = p.name;
+          card.appendChild(img);
+        }
+        const name = document.createElement('div');
+        name.textContent = p.name;
+        card.appendChild(name);
+        const btn = document.createElement('input');
+        btn.type = 'radio';
+        btn.name = 'voteTarget';
+        btn.value = p.id;
+        card.appendChild(btn);
+        container.appendChild(card);
+        currentTargets.push(p.id);
+      });
+      document.getElementById('votePanel').hidden = currentTargets.length === 0;
+    }
+
+    document.getElementById('joinForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('nameInput').value;
+      const photoFile = document.getElementById('photoInput').files[0];
+      let photoBase64 = null;
+      if (photoFile) {
+        try {
+          photoBase64 = await compressImage(photoFile);
+          uploadProgress.style.display = 'none';
+          document.getElementById('photoPreview').innerHTML = `<img src="${photoBase64}" style="width:96px;height:96px;object-fit:cover;">`;
+        } catch (err) {
+          console.error('Failed to compress image', err);
+        }
+      }
+      socket.emit('join_game', { roomId: currentRoomId, name, photoBase64, playerId });
+    });
+
+    document.getElementById('voteBtn').addEventListener('click', () => {
+      const selected = document.querySelector('input[name="voteTarget"]:checked');
+      if (!playerId || !selected) return;
+      socket.emit('cast_vote', { roomId: currentRoomId, voterId: playerId, targetId: selected.value });
+      statusElem.textContent = t('voteSubmitted');
+      document.getElementById('votePanel').hidden = true;
+    });
+
+    document.getElementById('blankGuessBtn').addEventListener('click', () => {
+      if (!blankGuessing) return;
+      const guess = document.getElementById('blankGuessInput').value || '';
+      socket.emit('blank_guess_submit', { roomId: currentRoomId, playerId, guess });
+      document.getElementById('blankGuessPanel').hidden = true;
+      statusElem.textContent = t('blankGuessing');
+    });
+
+    socket.on('joined', (data) => {
+      playerId = data.playerId;
+      localStorage.setItem(storageKey, playerId);
+      playerOut = false;
+      playerRole = null;
+      roleReveal.textContent = '';
+      document.getElementById('joinForm').hidden = true;
+      document.getElementById('leaveBtn').hidden = false;
+      document.getElementById('joinStatus').textContent = `${t('name')}: ${data.name || ''} — ${t('waiting')}`;
+      document.getElementById('playerName').textContent = `${t('name')}: ${data.name || ''}`;
+      document.getElementById('countStatus').textContent = '';
+      document.getElementById('wordBox').textContent = '';
+      document.getElementById('votePanel').hidden = true;
+      document.getElementById('blankGuessPanel').hidden = true;
+    });
+
+    socket.on('your_word', ({ word }) => {
+      document.getElementById('wordBox').textContent = `${t('yourWord')}: ${word || ''}`;
+      document.getElementById('joinStatus').textContent = '';
+    });
+
+    socket.on('game_started', (payload = {}) => {
+      playerOut = false;
+      blankGuessing = false;
+      if (payload.roles && playerId) {
+        const mine = payload.roles.find(r => r.id === playerId);
+        if (mine) playerRole = mine.role;
+      }
+      roleReveal.textContent = '';
+      document.getElementById('votePanel').hidden = true;
+      document.getElementById('blankGuessPanel').hidden = true;
+      statusElem.textContent = t('gameStartedPlayer');
+    });
+
+    socket.on('vote_begin', ({ players }) => {
+      if (playerOut) {
+        document.getElementById('votePanel').hidden = true;
+        statusElem.textContent = t('playerOut');
+        return;
+      }
+      renderVoteCards(players);
+      statusElem.textContent = '';
+      document.getElementById('blankGuessPanel').hidden = true;
+      blankGuessing = false;
+    });
+
+    socket.on('vote_update', () => {});
+
+    socket.on('voting_complete', (data) => {
+      if (data.status === 'out' && data.player) {
+        statusElem.textContent = `${data.player.name} ${t('playerOut')}`;
+      } else if (data.status === 'tie') {
+        statusElem.textContent = t('tie');
+      }
+      if (data.result?.result === 'civil_win') {
+        statusElem.textContent = t('civilianWin');
+      } else if (data.result?.result === 'spy_win') {
+        statusElem.textContent = t('spyWin');
+      } else if (data.result?.result === 'blank_guess') {
+        statusElem.textContent = t('blankGuessing');
+        document.getElementById('blankGuessPanel').hidden = false;
+        document.getElementById('blankGuessInput').value = '';
+        blankGuessing = true;
+      } else if (data.result?.result === 'blank_win') {
+        statusElem.textContent = t('blankWin');
+      }
+      if (data.player && data.player.id === playerId) {
+        playerOut = true;
+        statusElem.textContent = t('playerOut');
+        document.getElementById('votePanel').hidden = true;
+        document.getElementById('blankGuessPanel').hidden = true;
+      }
+    });
+
+    socket.on('you_out', () => {
+      playerOut = true;
+      statusElem.textContent = t('playerOut');
+      document.getElementById('votePanel').hidden = true;
+      document.getElementById('blankGuessPanel').hidden = true;
+    });
+
+    socket.on('room_not_found', () => {
+      statusElem.textContent = t('roomNotFound');
+      document.getElementById('joinForm').hidden = true;
+      document.getElementById('votePanel').hidden = true;
+      document.getElementById('blankGuessPanel').hidden = true;
+      localStorage.removeItem(storageKey);
+    });
+
+    socket.on('update_lobby', (payload) => {
+      if (!payload) return;
+      const joined = payload.joined ?? payload.players?.length ?? 0;
+      const total = payload.total ?? 0;
+      document.getElementById('countStatus').textContent = `${t('totalPlayers')}: ${joined}/${total}`;
+    });
+
+    socket.on('game_over', (payload) => {
+      playerOut = true;
+      if (payload.finalRoles && playerId) {
+        const mine = payload.finalRoles.find(p => p.id === playerId);
+        if (mine) playerRole = mine.role;
+      }
+      updateRoleReveal();
+      if (payload.result === 'civil_win') statusElem.textContent = t('civilianWin');
+      if (payload.result === 'spy_win') statusElem.textContent = t('spyWin');
+      if (payload.result === 'blank_guess') statusElem.textContent = t('blankGuessing');
+      if (payload.result === 'blank_win') statusElem.textContent = `${t('blankWin')} ${payload.winnerProfiles?.map(p => p.name).join(', ') || ''}`;
+      document.getElementById('blankGuessPanel').hidden = true;
+    });
+
+    socket.on('room_reset_wait', () => {
+      playerOut = false;
+      playerRole = null;
+      roleReveal.textContent = '';
+      document.getElementById('joinForm').hidden = true;
+      document.getElementById('leaveBtn').hidden = false;
+      document.getElementById('joinStatus').textContent = '等待房間建立...';
+      document.getElementById('votePanel').hidden = true;
+      document.getElementById('blankGuessPanel').hidden = true;
+    });
+
+    socket.on('redirect_room', ({ roomId, name, image, playerId: pid }) => {
+      currentRoomId = roomId;
+      storageKey = `undercover-${currentRoomId}`;
+      if (pid) playerId = pid;
+      playerOut = false;
+      playerRole = null;
+      roleReveal.textContent = '';
+      document.getElementById('roomInfo').textContent = `${t('roomId')}: ${currentRoomId}`;
+      socket.emit('join_game', { roomId: currentRoomId, name, existingImage: image, playerId });
+    });
+
+    socket.on('kicked_wait', ({ message }) => {
+      document.getElementById('joinStatus').textContent = message || 'room full, please rejoin later';
+      document.getElementById('votePanel').hidden = true;
+      document.getElementById('blankGuessPanel').hidden = true;
+    });
+
+    socket.on('blank_guess_start', () => {
+      statusElem.textContent = t('blankGuessing');
+      document.getElementById('blankGuessPanel').hidden = false;
+      document.getElementById('blankGuessInput').value = '';
+      blankGuessing = true;
+    });
+
+    socket.on('blank_guess_wait', () => {
+      statusElem.textContent = t('blankGuessing');
+      document.getElementById('blankGuessPanel').hidden = true;
+      blankGuessing = false;
+      document.getElementById('votePanel').hidden = true;
+      document.getElementById('voteCards').innerHTML = '';
+    });
+
+    socket.on('blank_guess_prompt', () => {
+      statusElem.textContent = t('blankGuessing');
+      document.getElementById('blankGuessPanel').hidden = false;
+      document.getElementById('blankGuessInput').value = '';
+      blankGuessing = true;
+    });
+
+    socket.on('blank_guess_end', () => {
+      blankGuessing = false;
+      document.getElementById('blankGuessPanel').hidden = true;
+      document.getElementById('blankGuessInput').value = '';
+      statusElem.textContent = t('gameContinues');
+      document.getElementById('votePanel').hidden = true;
+      document.getElementById('voteCards').innerHTML = '';
+    });
+
+    document.getElementById('leaveBtn').addEventListener('click', () => {
+      if (playerId) {
+        socket.emit('leave_room', { roomId: currentRoomId, playerId });
+      }
+      localStorage.removeItem(storageKey);
+      location.reload();
+    });
+
+    const storedId = localStorage.getItem(storageKey);
+    if (storedId) {
+      playerId = storedId;
+      socket.emit('join_game', { roomId: currentRoomId, playerId });
+    }
+
+    loadI18n();
+  </script>
+</body>
+</html>

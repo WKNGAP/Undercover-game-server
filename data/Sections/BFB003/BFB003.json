@@ -1,0 +1,67 @@
+{
+  "id": "BFB003",
+  "config": {
+    "totalPlayers": 4,
+    "spyCount": 1,
+    "blankCount": 0,
+    "type": "all"
+  },
+  "question": {
+    "id": "食物-2",
+    "wordA": "泡麵",
+    "wordB": "麵條",
+    "type": "食物"
+  },
+  "players": [
+    {
+      "id": "5579a96b-5834-4709-8e6c-4a7a7a3256fe",
+      "socketId": "2esL9NqxvfGIJvUQAAAV",
+      "name": "edge-normal",
+      "image": "/sections/BFB003/5579a96b-5834-4709-8e6c-4a7a7a3256fe.jpg",
+      "role": "Spy",
+      "word": "泡麵",
+      "isOut": true,
+      "vote": null,
+      "rng": 0.21292895650840182
+    },
+    {
+      "id": "8b5b20db-7d8e-4368-ab24-7ecbc9ce0272",
+      "socketId": "-IcpZYnqahequVZQAAAX",
+      "name": "Billy",
+      "image": "/sections/BFB003/8b5b20db-7d8e-4368-ab24-7ecbc9ce0272.jpg",
+      "role": "Civilian",
+      "word": "麵條",
+      "isOut": false,
+      "vote": null,
+      "rng": 0.3217781115089904
+    },
+    {
+      "id": "c2831aa0-f699-4fd9-97cc-704663b13afc",
+      "socketId": "mnJZajVqXTu3HkysAAAZ",
+      "name": "Firefox",
+      "image": "/sections/BFB003/c2831aa0-f699-4fd9-97cc-704663b13afc.jpg",
+      "role": "Civilian",
+      "word": "麵條",
+      "isOut": true,
+      "vote": null,
+      "rng": 0.7061809799086032
+    },
+    {
+      "id": "1c98445e-d8a2-456d-bf87-b502e402ae50",
+      "socketId": "v559wltl2HLrApatAAAT",
+      "name": "abc",
+      "image": "/sections/BFB003/1c98445e-d8a2-456d-bf87-b502e402ae50.jpg",
+      "role": "Civilian",
+      "word": "麵條",
+      "isOut": false,
+      "vote": null,
+      "rng": 0.9088637817759961
+    }
+  ],
+  "state": "FINISHED",
+  "votes": {
+    "counts": {},
+    "voters": []
+  },
+  "createdAt": "2025-12-10T03:11:18.020Z"
+}
