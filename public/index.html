@@ -58,6 +58,7 @@
   <div id="roomLink"></div>
   <img id="qr" alt="QR code" hidden>
   <button id="voteStartBtn" disabled>開始投票</button>
+  <button id="resyncBtn" disabled>重新同步</button>
   <div id="endgame"></div>
   <button id="restartSame" hidden>同班重開</button>
   <button id="restartNew" hidden>重新開始</button>
@@ -92,6 +93,7 @@
       document.getElementById('uploadLabel').textContent = t('uploadCSV');
       document.getElementById('lobbyHeading').textContent = t('lobbyHeading');
       document.getElementById('voteStartBtn').textContent = t('vote');
+      document.getElementById('resyncBtn').textContent = t('resync') || '重新同步';
     }
 
     async function loadI18n() {
@@ -157,16 +159,22 @@
         if (showRole && p.role) {
           const roleSpan = document.createElement('div');
           roleSpan.className = 'role-label';
-          roleSpan.textContent = roleLabel(p.role);
+          const roleText = roleLabel(p.role);
+          const wordText = p.word ? `${roleText}: ${p.word}` : roleText;
+          roleSpan.textContent = wordText;
           li.appendChild(roleSpan);
         }
         if (p.isOut) outList.appendChild(li); else aliveList.appendChild(li);
       });
       let statusText = `${t('totalPlayers')}: ${aliveCount}/${total}`;
+      if (counts) {
+        statusText += ` (${t('spies')}: ${counts.spies}, ${t('blanks')}: ${counts.blanks}, ${t('roleCivilian') || 'Civilian'}: ${counts.civilians})`;
+      }
       document.getElementById('status').textContent = statusText;
       document.getElementById('startBtn').disabled = !activeRoomId || state !== 'LOBBY' || joined !== total;
       const voteDisabledStates = ['LOBBY', 'BLANK_GUESS', 'VOTING', 'FINISHED'];
       document.getElementById('voteStartBtn').disabled = !activeRoomId || voteDisabledStates.includes(state);
+      return statusText;
     }
 
     document.getElementById('createForm').addEventListener('submit', async (e) => {
@@ -194,6 +202,7 @@
       qr.src = data.qr;
       qr.hidden = false;
       socket.emit('host_subscribe', { roomId: data.roomId });
+      document.getElementById('resyncBtn').disabled = false;
       document.getElementById('createForm').hidden = true;
       document.getElementById('uploadForm').hidden = true;
     });
@@ -206,6 +215,11 @@
     document.getElementById('voteStartBtn').addEventListener('click', () => {
       if (!activeRoomId) return;
       socket.emit('start_vote', { roomId: activeRoomId });
+    });
+
+    document.getElementById('resyncBtn').addEventListener('click', () => {
+      if (!activeRoomId) return;
+      socket.emit('host_resync', { roomId: activeRoomId });
     });
 
     document.getElementById('restartSame').addEventListener('click', () => {
@@ -237,12 +251,16 @@
       renderVotes(payload);
     });
 
-    socket.on('game_started', ({ players }) => {
+    socket.on('game_started', ({ players, counts, total }) => {
       currentState = 'GAMING';
-      document.getElementById('status').textContent = t('gameStartedHost');
       document.getElementById('qr').hidden = true;
       document.getElementById('roomLink').textContent = '';
-      renderLobby({ players, state: 'GAMING', joined: players.length });
+      const statusText = renderLobby({ players, state: 'GAMING', joined: players.length, total, counts });
+      if (statusText) {
+        document.getElementById('status').textContent = `${t('gameStartedHost')} — ${statusText}`;
+      } else {
+        document.getElementById('status').textContent = t('gameStartedHost');
+      }
       renderVotes({ votes: { counts: {} }, players });
       document.getElementById('endgame').textContent = '';
       document.getElementById('restartSame').hidden = true;
@@ -315,6 +333,7 @@
       document.getElementById('roomLink').textContent = '';
       document.getElementById('qr').hidden = true;
       document.getElementById('voteStartBtn').disabled = true;
+      document.getElementById('resyncBtn').disabled = true;
     });
 
     function renderVotes(payload) {

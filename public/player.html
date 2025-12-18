@@ -58,11 +58,37 @@
     let blankGuessing = false;
     let playerOut = false;
     let playerRole = null;
+    let playerWord = '';
     const statusElem = document.getElementById('voteStatus');
     const roleReveal = document.getElementById('roleReveal');
 
+    function storedPlayerId() {
+      return localStorage.getItem(storageKey);
+    }
+
+    function savePlayerSession(id) {
+      if (id) localStorage.setItem(storageKey, id);
+    }
+
+    function clearPlayerSession() {
+      localStorage.removeItem(storageKey);
+    }
+
+    function attemptResumeSession() {
+      const stored = storedPlayerId();
+      if (!stored || !currentRoomId) return;
+      playerId = stored;
+      socket.emit('join_game', { roomId: currentRoomId, playerId });
+      document.getElementById('joinStatus').textContent = t('reconnecting');
+    }
+
     function t(key) {
       return dict[lang]?.[key] || dict.zh?.[key] || key;
+    }
+
+    function tf(key, fallbackText) {
+      const val = t(key);
+      return val === key ? (fallbackText || key) : val;
     }
 
     function applyI18n() {
@@ -136,6 +162,7 @@
 
     function updateRoleReveal() {
       const text = roleLabel(playerRole);
+      // Only show role label; do not show the word on player UI after game
       roleReveal.textContent = text || '';
     }
 
@@ -210,9 +237,10 @@
 
     socket.on('joined', (data) => {
       playerId = data.playerId;
-      localStorage.setItem(storageKey, playerId);
+      savePlayerSession(playerId);
       playerOut = false;
       playerRole = null;
+      playerWord = '';
       roleReveal.textContent = '';
       document.getElementById('joinForm').hidden = true;
       document.getElementById('leaveBtn').hidden = false;
@@ -225,13 +253,23 @@
     });
 
     socket.on('your_word', ({ word }) => {
+      playerWord = word || '';
       document.getElementById('wordBox').textContent = `${t('yourWord')}: ${word || ''}`;
       document.getElementById('joinStatus').textContent = '';
+    });
+
+    socket.on('connect', () => {
+      attemptResumeSession();
+    });
+
+    socket.on('disconnect', () => {
+      document.getElementById('joinStatus').textContent = t('reconnecting');
     });
 
     socket.on('game_started', (payload = {}) => {
       playerOut = false;
       blankGuessing = false;
+      playerWord = '';
       if (payload.roles && playerId) {
         const mine = payload.roles.find(r => r.id === playerId);
         if (mine) playerRole = mine.role;
@@ -294,7 +332,7 @@
       document.getElementById('joinForm').hidden = true;
       document.getElementById('votePanel').hidden = true;
       document.getElementById('blankGuessPanel').hidden = true;
-      localStorage.removeItem(storageKey);
+      clearPlayerSession();
     });
 
     socket.on('update_lobby', (payload) => {
@@ -308,13 +346,33 @@
       playerOut = true;
       if (payload.finalRoles && playerId) {
         const mine = payload.finalRoles.find(p => p.id === playerId);
-        if (mine) playerRole = mine.role;
+        if (mine) {
+          playerRole = mine.role;
+          playerWord = '';
+        }
       }
-      updateRoleReveal();
-      if (payload.result === 'civil_win') statusElem.textContent = t('civilianWin');
-      if (payload.result === 'spy_win') statusElem.textContent = t('spyWin');
-      if (payload.result === 'blank_guess') statusElem.textContent = t('blankGuessing');
-      if (payload.result === 'blank_win') statusElem.textContent = `${t('blankWin')} ${payload.winnerProfiles?.map(p => p.name).join(', ') || ''}`;
+      let resultText = '';
+      if (payload.result === 'civil_win') resultText = t('civilianWin');
+      if (payload.result === 'spy_win') resultText = t('spyWin');
+      if (payload.result === 'blank_guess') resultText = t('blankGuessing');
+      if (payload.result === 'blank_win') resultText = `${t('blankWin')} ${payload.winnerProfiles?.map(p => p.name).join(', ') || ''}`;
+      let winnerRoles = [];
+      if (payload.result === 'civil_win') winnerRoles = ['Civilian'];
+      if (payload.result === 'spy_win') winnerRoles = ['Spy'];
+      if (payload.result === 'blank_win') winnerRoles = ['Blank'];
+      const youWinText = tf('youWin', 'You Win');
+      const youLoseText = tf('youLose', 'You Lose');
+      const winLabel = tf('winLabel', '勝利');
+      const loseLabel = tf('loseLabel', '失敗');
+      const isWinKnown = winnerRoles.length > 0 && playerRole;
+      const outcomeText = isWinKnown ? (winnerRoles.includes(playerRole) ? youWinText : youLoseText) : '';
+      const roleOutcome = playerRole && isWinKnown ? `${roleLabel(playerRole)}:${winnerRoles.includes(playerRole) ? winLabel : loseLabel}` : '';
+      if (roleOutcome) {
+        roleReveal.textContent = roleOutcome;
+      } else {
+        updateRoleReveal();
+      }
+      statusElem.textContent = [resultText, roleOutcome || outcomeText].filter(Boolean).join(' — ');
       document.getElementById('blankGuessPanel').hidden = true;
     });
 
@@ -333,6 +391,7 @@
       currentRoomId = roomId;
       storageKey = `undercover-${currentRoomId}`;
       if (pid) playerId = pid;
+      if (playerId) savePlayerSession(playerId);
       playerOut = false;
       playerRole = null;
       roleReveal.textContent = '';
@@ -381,16 +440,11 @@
       if (playerId) {
         socket.emit('leave_room', { roomId: currentRoomId, playerId });
       }
-      localStorage.removeItem(storageKey);
+      clearPlayerSession();
       location.reload();
     });
 
-    const storedId = localStorage.getItem(storageKey);
-    if (storedId) {
-      playerId = storedId;
-      socket.emit('join_game', { roomId: currentRoomId, playerId });
-    }
-
+    attemptResumeSession();
     loadI18n();
   </script>
 </body>

@@ -29,6 +29,20 @@ const SECTIONS_DIR = path.join(DATA_ROOT, 'Sections');
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
+function clearPersistedRooms() {
+    try {
+        const entries = fs.readdirSync(SECTIONS_DIR, { withFileTypes: true });
+        entries.forEach((entry) => {
+            fs.rmSync(path.join(SECTIONS_DIR, entry.name), { recursive: true, force: true });
+        });
+        console.log('Cleared persisted rooms at startup');
+    } catch (e) {
+        console.error('Failed to clear persisted rooms', e);
+    }
+}
+
+clearPersistedRooms();
+
 // Multer setup for CSV uploads (question banks)
 const upload = multer({
     storage: multer.diskStorage({
@@ -220,6 +234,7 @@ async function startBlankGuess(room, options = {}) {
     }
     if (!eligibleIds.length) return;
     room.state = 'BLANK_GUESS';
+    room.lastResult = null;
     room.blankGuess = {
         eligible: eligibleIds,
         answers: {},
@@ -254,6 +269,7 @@ async function handleBlankGuessSubmit(roomId, playerId, guess) {
     room.blankGuess = null;
     if (success) {
         room.state = 'FINISHED';
+        room.lastResult = 'blank_win';
         await persistRoom(room);
         const winners = room.players.filter(p => eligibleIds.includes(p.id));
         winners.forEach(p => p.pendingBlank = false);
@@ -281,8 +297,10 @@ async function handleBlankGuessSubmit(roomId, playerId, guess) {
         const result = checkEndGame(room);
         const finalRoles = scrubPlayersForHost(room.players);
         if (result.result === 'civil_win') {
+            room.lastResult = 'civil_win';
             io.to(roomId).emit('game_over', { result: 'civil_win', players: room.players.filter(p => p.role === 'Civilian'), finalRoles });
         } else if (result.result === 'spy_win') {
+            room.lastResult = 'spy_win';
             io.to(roomId).emit('game_over', { result: 'spy_win', players: room.players.filter(p => p.role === 'Spy'), finalRoles });
         } else {
             io.to(roomId).emit('blank_guess_end', { counts: remainingCounts(room), state: room.state });
@@ -295,6 +313,7 @@ async function startGame(roomId) {
     if (!room || room.state !== 'LOBBY') return;
     if (room.players.length !== room.config.totalPlayers) return;
 
+    room.lastResult = null;
     room.usedQuestionIds = room.usedQuestionIds || [];
     room.questionHistory = room.questionHistory || [];
     const question = pickQuestion(room.config.type, room.usedQuestionIds);
@@ -331,11 +350,12 @@ async function startGame(roomId) {
         io.to(roomId).emit('game_started', {
             players: scrubPlayersForAudience(room.players),
             roles: scrubPlayersForHost(room.players),
-            counts
+            counts,
+            total: room.config.totalPlayers
         });
 
         room.players.forEach(p => {
-        io.to(p.socketId).emit('your_word', { word: p.word });
+        io.to(p.socketId).emit('your_word', { word: p.word || '' });
     });
     room.votes = { counts: {}, voters: [] };
     io.to(roomId).emit('update_lobby', lobbyPayload(room));
@@ -379,7 +399,8 @@ app.post('/api/create-room', async (req, res) => {
             votes: { counts: {}, voters: [] },
             createdAt: new Date().toISOString(),
             usedQuestionIds: [],
-            questionHistory: []
+            questionHistory: [],
+            lastResult: null
         };
 
         const joinUrl = `${req.protocol}://${req.headers.host}/join/${roomId}`;
@@ -423,6 +444,47 @@ io.on('connection', (socket) => {
         console.log(`Host viewing lobby for room ${roomId} (viewers=${viewers.size})`);
     });
 
+    // Host manual resync: resend current state to everyone in the room
+    socket.on('host_resync', ({ roomId }) => {
+        const targetRoomId = roomId || socket.data.hostRoom;
+        if (!targetRoomId) return;
+        const room = ROOMS[targetRoomId];
+        if (!room) return;
+        const counts = remainingCounts(room);
+        io.to(targetRoomId).emit('update_lobby', lobbyPayload(room));
+
+        if (room.state === 'GAMING') {
+            io.to(targetRoomId).emit('game_started', {
+                players: scrubPlayersForAudience(room.players),
+                roles: scrubPlayersForHost(room.players),
+                counts,
+                total: room.config.totalPlayers
+            });
+            room.players.forEach(p => {
+                if (p.socketId) {
+                    io.to(p.socketId).emit('your_word', { word: p.word || '' });
+                }
+            });
+        } else if (room.state === 'VOTING') {
+            const alive = room.players.filter(p => !p.isOut);
+            io.to(targetRoomId).emit('vote_begin', { players: scrubPlayersForAudience(alive), votes: room.votes || { counts: {}, voters: [] } });
+        } else if (room.state === 'BLANK_GUESS') {
+            io.to(targetRoomId).emit('blank_guess_start');
+            const eligible = room.blankGuess?.eligible || [];
+            room.players.forEach(p => {
+                if (!p.socketId) return;
+                if (eligible.includes(p.id)) {
+                    io.to(p.socketId).emit('blank_guess_prompt');
+                } else {
+                    io.to(p.socketId).emit('blank_guess_wait');
+                }
+            });
+        } else if (room.state === 'FINISHED') {
+            const finalRoles = scrubPlayersForHost(room.players);
+            io.to(targetRoomId).emit('game_over', { result: room.lastResult || 'finished', finalRoles });
+        }
+    });
+
     // Player Joins
     socket.on('join_game', async ({ roomId, name, photoBase64, playerId: existingId, existingImage }) => {
         const room = ROOMS[roomId];
@@ -437,15 +499,37 @@ io.on('connection', (socket) => {
             player.socketId = socket.id;
             socket.join(roomId);
             socket.emit('joined', { playerId: player.id, roomId, name: player.name, image: player.image });
-            if (player.word) {
-                socket.emit('your_word', { word: player.word });
-            }
+            socket.emit('your_word', { word: player.word || '' });
             const counts = room.state !== 'LOBBY' ? remainingCounts(room) : null;
-        io.to(roomId).emit('update_lobby', lobbyPayload(room));
-        console.log(`Player rejoined room ${roomId}: ${player.id}`);
-        await persistRoom(room);
-        return;
-    }
+            io.to(roomId).emit('update_lobby', lobbyPayload(room));
+
+            // Send current state snapshot so the player UI can recover after reconnect/refresh
+            if (room.state === 'GAMING') {
+                socket.emit('game_started', {
+                    players: scrubPlayersForAudience(room.players),
+                    roles: scrubPlayersForHost(room.players),
+                    counts,
+                    total: room.config.totalPlayers
+                });
+            } else if (room.state === 'VOTING') {
+                const alive = room.players.filter(p => !p.isOut);
+                socket.emit('vote_begin', { players: scrubPlayersForAudience(alive), votes: room.votes || { counts: {}, voters: [] } });
+            } else if (room.state === 'BLANK_GUESS') {
+                const eligible = room.blankGuess?.eligible || [];
+                if (eligible.includes(player.id)) {
+                    socket.emit('blank_guess_prompt');
+                } else {
+                    socket.emit('blank_guess_wait');
+                }
+            } else if (room.state === 'FINISHED') {
+                const finalRoles = scrubPlayersForHost(room.players);
+                socket.emit('game_over', { result: room.lastResult || 'finished', finalRoles });
+            }
+
+            console.log(`Player rejoined room ${roomId}: ${player.id}`);
+            await persistRoom(room);
+            return;
+        }
 
         if (room.players.length >= room.config.totalPlayers) return socket.emit('error', 'Room is full');
 
@@ -515,8 +599,10 @@ io.on('connection', (socket) => {
         io.to(player.socketId).emit('you_out', { reason: 'left' });
         const finalRoles = scrubPlayersForHost(room.players);
         if (result.result === 'civil_win') {
+            room.lastResult = 'civil_win';
             io.to(roomId).emit('game_over', { result: 'civil_win', players: room.players.filter(p => p.role === 'Civilian'), finalRoles });
         } else if (result.result === 'spy_win') {
+            room.lastResult = 'spy_win';
             io.to(roomId).emit('game_over', { result: 'spy_win', players: room.players.filter(p => p.role === 'Spy'), finalRoles });
         } else if (result.result === 'blank_guess') {
             await startBlankGuess(room, { onlyEliminated: true, extraEligibleIds: [player.id] });
@@ -603,8 +689,10 @@ io.on('connection', (socket) => {
 
         const finalRoles = scrubPlayersForHost(room.players);
         if (result.result === 'civil_win') {
+            room.lastResult = 'civil_win';
             io.to(roomId).emit('game_over', { result: 'civil_win', players: room.players.filter(p => p.role === 'Civilian'), finalRoles });
         } else if (result.result === 'spy_win') {
+            room.lastResult = 'spy_win';
             io.to(roomId).emit('game_over', { result: 'spy_win', players: room.players.filter(p => p.role === 'Spy'), finalRoles });
         } else if (result.result === 'blank_guess') {
             await startBlankGuess(room);
@@ -627,6 +715,7 @@ io.on('connection', (socket) => {
             room.question = null;
             room.votes = { counts: {}, voters: [] };
             room.state = 'LOBBY';
+            room.lastResult = null;
             room.players.forEach(p => {
                 p.isOut = false;
                 p.role = null;

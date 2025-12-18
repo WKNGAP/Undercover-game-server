@@ -2,12 +2,18 @@
 
 Real-time web implementation of the *Undercover* / *谁是卧底* social deduction party game. Hosts create a room, invite players via QR code, and run each round completely inside a browser. The server handles word assignment, voting flow, blank-player (“白板”) guessing, reconnections, and localization support.
 
+Latest highlights (v0.9.0.0a):
+- Host “Resync” button to rebroadcast the current phase (lobby, vote, blank-guess, game over) and resend words to reconnecting players.
+- Stronger reconnects: player sessions auto-resume, rejoin always sends `your_word`, and host lobby shows alive/total plus per-role counts.
+- End-of-game displays: host sees role+word (e.g., 臥底:蛋糕); players see role+win/lose (e.g., 臥底:勝利) without leaking the secret word.
+- Startup cleanup: removes persisted rooms under `data/Sections` to avoid stale lobbies carrying over between runs.
+
 ## Features
 
 - **Express + Socket.IO backend** with persistent room snapshots so hosts can refresh without losing state.
 - **Dynamic question banks** under `data/QuestionLib` (CSV upload or manual drop-in). Each room avoids reusing words until its bank is exhausted.
-- **Host dashboard** (`/`) for room creation, QR display, live lobby view, vote control, and end-game management.
-- **Player web app** (`/join/:roomId`) with camera upload, localized UI strings, blank-guess prompts, and resume logic via cookies/localStorage.
+- **Host dashboard** (`/`) for room creation, QR display, live lobby view, vote control, resync, and end-game management with revealed roles+words.
+- **Player web app** (`/join/:roomId`) with camera upload, localized UI strings, blank-guess prompts, reconnect/resume logic, and clear win/lose display on game end (role only, no word leak).
 - **Automatic image handling** (compressed on client, resized on server with `sharp`, and stored under `data/Sections`).
 - **Blank-guess flow** to enforce “白板努力中”: eligible blanks get a private prompt while every screen shows the status banner; game resumes or ends automatically after the guesses resolve.
 - **Identity reveal** once a match ends so both lobby and players see who was Spy/Blank/Civilian.
@@ -47,7 +53,7 @@ The server listens on `PORT` (defaults to `3000`). Visit `http://localhost:3000/
 
 Question banks live in `data/QuestionLib`. On startup the server creates required folders, but you can also upload CSVs through the host UI. Each row after the header should be `wordA,wordB`. Rooms track `usedQuestionIds` so new rounds avoid repeating words until necessary.
 
-Images and persistent room dumps land in `data/Sections/<ROOMID>`. To keep deployments stateless, mount this directory to durable storage (see Docker notes).
+Images and persistent room dumps land in `data/Sections/<ROOMID>`. On startup, old room folders are cleared to prevent stale lobbies. To keep deployments stateless but durable, mount this directory to persistent storage (see Docker notes).
 
 ## Docker Support
 
