@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Undercover Test Console</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Arial, sans-serif;
+      --border: #c8ced8;
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --text: #172033;
+      --muted: #5e6675;
+      --accent: #1565c0;
+      --danger: #b3261e;
+      --ok: #137333;
+    }
+
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 18px;
+    }
+    main { padding: 18px; display: grid; gap: 16px; }
+    h1 { font-size: 22px; margin: 0 0 10px; }
+    h2 { font-size: 16px; margin: 0 0 10px; }
+    label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+    input, select, button {
+      font: inherit;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      background: #fff;
+      min-height: 38px;
+    }
+    button {
+      cursor: pointer;
+      border-color: #9aa7bb;
+      background: #eef3fb;
+      color: var(--text);
+    }
+    button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    button.danger { background: #fce8e6; color: var(--danger); border-color: #f2b8b5; }
+    button:disabled { cursor: not-allowed; opacity: 0.55; }
+    .toolbar {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) minmax(120px, 160px) minmax(120px, 160px) minmax(120px, 160px) auto;
+      gap: 10px;
+      align-items: end;
+    }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+    }
+    .status-line { color: var(--muted); font-size: 14px; margin-top: 8px; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px;
+    }
+    .player {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fff;
+      display: grid;
+      gap: 8px;
+    }
+    .player header {
+      position: static;
+      border: 0;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .name { font-weight: 700; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 12px;
+      background: #eef0f3;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .badge.ok { background: #e6f4ea; color: var(--ok); }
+    .badge.bad { background: #fce8e6; color: var(--danger); }
+    .word { min-height: 22px; font-weight: 700; }
+    .events {
+      height: 180px;
+      overflow: auto;
+      background: #111827;
+      color: #d1d5db;
+      border-radius: 6px;
+      padding: 10px;
+      font-family: Consolas, monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+    }
+    @media (max-width: 780px) {
+      .toolbar { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Undercover Test Console</h1>
+    <div class="toolbar">
+      <label>
+        Server URL
+        <input id="serverUrl" placeholder="http://localhost:3000" autocomplete="off">
+      </label>
+      <label>
+        Room ID
+        <input id="roomId" placeholder="ABC123" autocomplete="off">
+      </label>
+      <label>
+        Player count
+        <input id="playerCount" type="number" min="1" max="20" value="5">
+      </label>
+      <label>
+        Name prefix
+        <input id="namePrefix" value="Tester">
+      </label>
+      <div class="actions">
+        <button id="joinBtn" type="button" class="primary">Join Players</button>
+        <button id="disconnectAllBtn" type="button">Disconnect All</button>
+        <button id="reconnectAllBtn" type="button">Reconnect All</button>
+        <button id="clearBtn" type="button">Clear</button>
+      </div>
+    </div>
+    <div id="summary" class="status-line">No simulated players connected.</div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2>Vote Helper</h2>
+      <div class="toolbar">
+        <label>
+          Vote target
+          <select id="voteTarget"></select>
+        </label>
+        <div class="actions">
+          <button id="voteAllBtn" type="button">All Vote Target</button>
+          <button id="startVoteBtn" type="button">Start Vote</button>
+          <button id="blankFailBtn" type="button">Submit Blank Guess: wrong</button>
+        </div>
+      </div>
+      <div class="status-line">Use your Firefox host page for normal host actions. These buttons are shortcuts for repeated testing.</div>
+    </section>
+
+    <section class="panel">
+      <h2>Simulated Players</h2>
+      <div id="players" class="grid"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Event Log</h2>
+      <div id="events" class="events"></div>
+    </section>
+  </main>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const players = [];
+    const events = document.getElementById('events');
+    const playerGrid = document.getElementById('players');
+    const voteTarget = document.getElementById('voteTarget');
+    const summary = document.getElementById('summary');
+
+    function log(message) {
+      const time = new Date().toLocaleTimeString();
+      events.textContent += `[${time}] ${message}\n`;
+      events.scrollTop = events.scrollHeight;
+    }
+
+    function setSummary(message) {
+      summary.textContent = message;
+    }
+
+    function serverUrl() {
+      const raw = document.getElementById('serverUrl').value.trim();
+      return raw || window.location.origin;
+    }
+
+    function roomId() {
+      return document.getElementById('roomId').value.trim().toUpperCase();
+    }
+
+    function updateSummary() {
+      const connected = players.filter(p => p.socket?.connected).length;
+      const joined = players.filter(p => p.playerId).length;
+      setSummary(`${joined} joined, ${connected} connected.`);
+      renderPlayers();
+      renderVoteTargets();
+    }
+
+    function renderVoteTargets() {
+      voteTarget.innerHTML = '';
+      players.filter(p => p.playerId).forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.playerId;
+        opt.textContent = p.name;
+        voteTarget.appendChild(opt);
+      });
+    }
+
+    function setStatus(player, status) {
+      player.status = status;
+      updateSummary();
+    }
+
+    function bindSocket(player) {
+      if (typeof io !== 'function') {
+        setSummary('Socket.IO is not available. Open this page from http://localhost:3000/test-console.html');
+        log('Socket.IO client is missing. Do not open this file directly from disk.');
+        return false;
+      }
+      const targetServer = serverUrl();
+      const socket = io(targetServer, { transports: ['websocket'], reconnection: false, forceNew: true });
+      player.socket = socket;
+
+      socket.on('connect', () => {
+        setStatus(player, 'connected');
+        log(`${player.name}: socket connected to ${targetServer}`);
+      });
+      socket.on('connect_error', err => {
+        setStatus(player, 'connect_error');
+        setSummary(`Cannot connect to ${targetServer}`);
+        log(`${player.name}: connect_error ${err.message}`);
+      });
+      socket.on('disconnect', () => {
+        setStatus(player, 'disconnected');
+        log(`${player.name}: socket disconnected`);
+      });
+      socket.on('joined', data => {
+        player.playerId = data.playerId;
+        player.roomId = data.roomId;
+        setStatus(player, 'joined');
+        log(`${player.name}: joined ${data.roomId}`);
+      });
+      socket.on('your_word', data => {
+        player.word = data.word || '(blank)';
+        renderPlayers();
+      });
+      socket.on('game_started', payload => {
+        player.phase = 'GAMING';
+        player.publicPlayers = payload.players || [];
+        log(`${player.name}: game_started`);
+        renderPlayers();
+      });
+      socket.on('vote_begin', payload => {
+        player.phase = 'VOTING';
+        player.publicPlayers = payload.players || [];
+        log(`${player.name}: vote_begin`);
+        renderPlayers();
+      });
+      socket.on('vote_update', () => log(`${player.name}: vote_update`));
+      socket.on('voting_complete', payload => {
+        player.phase = payload.result?.result === 'blank_guess' ? 'BLANK_GUESS' : 'GAMING';
+        log(`${player.name}: voting_complete ${payload.status || ''}`);
+        renderPlayers();
+      });
+      socket.on('blank_guess_prompt', () => {
+        player.phase = 'BLANK_GUESS';
+        player.blankPrompt = true;
+        log(`${player.name}: blank_guess_prompt`);
+        renderPlayers();
+      });
+      socket.on('blank_guess_wait', () => {
+        player.phase = 'BLANK_GUESS';
+        log(`${player.name}: blank_guess_wait`);
+        renderPlayers();
+      });
+      socket.on('game_over', payload => {
+        player.phase = 'FINISHED';
+        log(`${player.name}: game_over ${payload.result || ''}`);
+        renderPlayers();
+      });
+      socket.on('you_out', payload => {
+        player.out = true;
+        log(`${player.name}: you_out ${payload.reason || ''}`);
+        renderPlayers();
+      });
+      socket.on('room_not_found', () => {
+        setStatus(player, 'room_not_found');
+        log(`${player.name}: room_not_found`);
+      });
+      socket.on('error', message => log(`${player.name}: error ${message}`));
+      return true;
+    }
+
+    function joinPlayer(player) {
+      const id = roomId();
+      if (!id) {
+        setSummary('Enter a room ID first.');
+        log('Enter a room ID first.');
+        document.getElementById('roomId').focus();
+        return;
+      }
+      if (!/^[A-Z0-9]{6}$/.test(id)) {
+        setSummary('Room ID should be the 6-character code from the host page.');
+        log(`Invalid room ID: ${id}`);
+        document.getElementById('roomId').focus();
+        return;
+      }
+      if (!player.socket || !player.socket.connected) {
+        const bound = bindSocket(player);
+        if (!bound) return;
+      }
+      player.roomId = id;
+      player.socket.emit('join_game', {
+        roomId: id,
+        name: player.name,
+        playerId: player.playerId,
+        existingImage: player.image
+      });
+      log(`${player.name}: join_game sent`);
+    }
+
+    function renderPlayers() {
+      playerGrid.innerHTML = '';
+      players.forEach((player, index) => {
+        const card = document.createElement('article');
+        card.className = 'player';
+
+        const head = document.createElement('header');
+        const name = document.createElement('div');
+        name.className = 'name';
+        name.textContent = player.name;
+        const status = document.createElement('span');
+        status.className = `badge ${player.socket?.connected ? 'ok' : 'bad'}`;
+        status.textContent = player.status || 'new';
+        head.append(name, status);
+
+        const word = document.createElement('div');
+        word.className = 'word';
+        word.textContent = `Word: ${player.word || '-'}`;
+
+        const phase = document.createElement('div');
+        phase.textContent = `Phase: ${player.phase || '-'}`;
+
+        const actions = document.createElement('div');
+        actions.className = 'actions';
+        const reconnect = document.createElement('button');
+        reconnect.textContent = player.socket?.connected ? 'Disconnect' : 'Reconnect';
+        reconnect.onclick = () => {
+          if (player.socket?.connected) player.socket.disconnect();
+          else joinPlayer(player);
+        };
+        const vote = document.createElement('button');
+        vote.textContent = 'Vote Target';
+        vote.disabled = !player.playerId || !voteTarget.value || voteTarget.value === player.playerId;
+        vote.onclick = () => player.socket.emit('cast_vote', {
+          roomId: roomId(),
+          voterId: player.playerId,
+          targetId: voteTarget.value
+        });
+        const blank = document.createElement('button');
+        blank.textContent = 'Guess wrong';
+        blank.disabled = !player.blankPrompt;
+        blank.onclick = () => player.socket.emit('blank_guess_submit', {
+          roomId: roomId(),
+          playerId: player.playerId,
+          guess: '__wrong__'
+        });
+        actions.append(reconnect, vote, blank);
+
+        const id = document.createElement('div');
+        id.className = 'status-line';
+        id.textContent = player.playerId ? `id: ${player.playerId.slice(0, 8)}` : `slot ${index + 1}`;
+
+        card.append(head, word, phase, actions, id);
+        playerGrid.appendChild(card);
+      });
+    }
+
+    document.getElementById('joinBtn').addEventListener('click', () => {
+      const count = Number(document.getElementById('playerCount').value);
+      if (!Number.isInteger(count) || count < 1) {
+        setSummary('Player count must be at least 1.');
+        return;
+      }
+      if (!roomId()) {
+        setSummary('Enter the host room ID, then click Join Players.');
+        document.getElementById('roomId').focus();
+        return;
+      }
+      const prefix = document.getElementById('namePrefix').value.trim() || 'Tester';
+      while (players.length < count) {
+        players.push({
+          name: `${prefix} ${players.length + 1}`,
+          status: 'new',
+          playerId: null,
+          word: '',
+          phase: ''
+        });
+      }
+      players.slice(0, count).forEach(joinPlayer);
+      updateSummary();
+    });
+
+    document.getElementById('disconnectAllBtn').addEventListener('click', () => {
+      players.forEach(p => p.socket?.disconnect());
+      updateSummary();
+    });
+
+    document.getElementById('reconnectAllBtn').addEventListener('click', () => {
+      players.forEach(joinPlayer);
+    });
+
+    document.getElementById('clearBtn').addEventListener('click', () => {
+      players.forEach(p => p.socket?.disconnect());
+      players.length = 0;
+      events.textContent = '';
+      updateSummary();
+    });
+
+    document.getElementById('voteAllBtn').addEventListener('click', () => {
+      const targetId = voteTarget.value;
+      players.forEach(p => {
+        if (p.playerId && p.playerId !== targetId && p.socket?.connected) {
+          p.socket.emit('cast_vote', { roomId: roomId(), voterId: p.playerId, targetId });
+          log(`${p.name}: voted`);
+        }
+      });
+    });
+
+    document.getElementById('startVoteBtn').addEventListener('click', () => {
+      const active = players.find(p => p.socket?.connected);
+      if (active) active.socket.emit('start_vote', { roomId: roomId() });
+      log('start_vote sent');
+    });
+
+    document.getElementById('blankFailBtn').addEventListener('click', () => {
+      players.filter(p => p.blankPrompt && p.socket?.connected).forEach(p => {
+        p.socket.emit('blank_guess_submit', { roomId: roomId(), playerId: p.playerId, guess: '__wrong__' });
+        log(`${p.name}: blank guess submitted`);
+      });
+    });
+
+    const params = new URLSearchParams(location.search);
+    document.getElementById('serverUrl').value = params.get('server') || window.location.origin;
+    const roomParam = params.get('room');
+    if (roomParam) document.getElementById('roomId').value = roomParam.toUpperCase();
+    updateSummary();
+  </script>
+</body>
+</html>

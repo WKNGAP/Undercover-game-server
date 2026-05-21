@@ -1,6 +1,18 @@
 # Changelog
 
-## v0.9.0.0a (latest)
+## v0.10.0 (latest)
+- Rebuilt the host and player web UI with React + Vite while keeping the existing Express/Socket.IO APIs stable.
+- Changed room flow to lobby-first manual start: hosts can create a room, show the QR code immediately, adjust spy/blank/max-player settings, then start when ready.
+- Added host language selection for English and Chinese using the shared i18n dictionary.
+- Added host kick controls for lobby and in-game players, including clean kicked-player session reset.
+- Added early vote completion when the current leader can no longer be caught by remaining votes.
+- Improved host monitor gameplay layout for 1080p screens with larger player photos, compact controls, active players in the main section, and secondary out-player display.
+- Added endgame result banner, full role/word reveal on host, clear blank no-word display, and winner card highlighting.
+- Enforced 20-character player name limits on client and server.
+- Added test tooling and docs for connectivity, vote/endgame behavior, and the test console; current socket integration suite covers 25 scenarios.
+- Added production frontend build scripts: `npm run web:dev`, `npm run build:web`, `npm run test:console`, and `npm run test:connectivity`.
+
+## v0.9.0.0a
 - Added host “Resync” control to rebroadcast current game state (lobby, vote, blank-guess, game over) and resend words to players after reconnects.
 - Improved player reconnect flow: stored player sessions resume automatically, rejoin always sends `your_word`, and state snapshots include totals/counts.
 - Display win/lose outcome on player devices when the game ends.

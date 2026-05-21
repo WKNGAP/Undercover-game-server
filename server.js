@@ -15,6 +15,7 @@ const { assignRoles } = require('./logic');
 
 const HOST_VIEWS = new Map(); // roomId -> Set(socketId)
 const WAITING_PLAYERS = new Map(); // socketId -> player snapshot for next room
+const MAX_PLAYER_NAME_LENGTH = 20;
 
 const app = express();
 const server = http.createServer(app);
@@ -23,6 +24,8 @@ const io = new Server(server);
 const DATA_ROOT = path.join(__dirname, 'data');
 const QUESTION_LIB_DIR = path.join(DATA_ROOT, 'QuestionLib');
 const SECTIONS_DIR = path.join(DATA_ROOT, 'Sections');
+const PUBLIC_DIR = path.join(__dirname, 'public');
+const DIST_DIR = path.join(__dirname, 'dist');
 
 // Ensure required folders exist
 [DATA_ROOT, QUESTION_LIB_DIR, SECTIONS_DIR].forEach((dir) => {
@@ -55,8 +58,15 @@ const upload = multer({
 });
 
 // Middleware
-app.use(express.static('public'));
 app.use('/sections', express.static(SECTIONS_DIR)); // serve saved images
+app.get('/test-console.html', (req, res) => {
+    res.sendFile(path.join(PUBLIC_DIR, 'test-console.html'));
+});
+app.get('/i18n.json', (req, res) => {
+    res.sendFile(path.join(PUBLIC_DIR, 'i18n.json'));
+});
+app.use(express.static(DIST_DIR));
+app.use(express.static(PUBLIC_DIR));
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 
@@ -117,6 +127,51 @@ function pickQuestion(selectedType, excludeIds = []) {
     return available[Math.floor(Math.random() * available.length)];
 }
 
+function appShellFile(fallbackFile) {
+    const distIndex = path.join(DIST_DIR, 'index.html');
+    if (fs.existsSync(distIndex)) return distIndex;
+    return path.join(PUBLIC_DIR, fallbackFile);
+}
+
+function parseOptionalPositiveInt(value) {
+    if (value === undefined || value === null || value === '') return null;
+    const num = Number(value);
+    return Number.isInteger(num) && num > 0 ? num : NaN;
+}
+
+function parseNonNegativeInt(value, fallback = 0) {
+    if (value === undefined || value === null || value === '') return fallback;
+    const num = Number(value);
+    return Number.isInteger(num) && num >= 0 ? num : NaN;
+}
+
+function emitHostError(socket, code, message) {
+    if (socket) socket.emit('host_error', { code, message });
+}
+
+function sanitizePlayerName(name, fallback) {
+    const trimmed = (name || '').trim();
+    return (trimmed || fallback).substring(0, MAX_PLAYER_NAME_LENGTH);
+}
+
+function resetVotes(room) {
+    room.votes = { counts: {}, voters: [] };
+}
+
+function sortedVoteEntries(votes) {
+    return Object.entries(votes?.counts || {}).sort((a, b) => b[1] - a[1]);
+}
+
+function lockedVoteWinner(room) {
+    const alivePlayers = room.players.filter(p => !p.isOut);
+    const remainingVotes = Math.max(0, alivePlayers.length - (room.votes?.voters?.length || 0));
+    const entries = sortedVoteEntries(room.votes);
+    if (!entries.length) return null;
+    const [topId, topVotes] = entries[0];
+    const secondVotes = entries[1]?.[1] || 0;
+    return topVotes > secondVotes + remainingVotes ? topId : null;
+}
+
 async function persistRoom(room) {
     const roomDir = path.join(SECTIONS_DIR, room.id);
     await fsp.mkdir(roomDir, { recursive: true });
@@ -138,10 +193,11 @@ async function removeRoom(roomId) {
 async function attachWaitingPlayers(roomId, room) {
     const waiting = Array.from(WAITING_PLAYERS.values());
     if (!waiting.length) return;
-    const allowCount = Math.max(0, room.config.totalPlayers - 1); // leave one slot to avoid auto start
+    const maxPlayers = room.config.maxPlayers;
+    const openSlots = maxPlayers ? Math.max(0, maxPlayers - room.players.length) : waiting.length;
     shuffle(waiting);
-    const allowed = waiting.slice(0, allowCount);
-    const kicked = waiting.slice(allowCount);
+    const allowed = waiting.slice(0, openSlots);
+    const kicked = waiting.slice(openSlots);
     allowed.forEach(w => {
         const sock = io.sockets.sockets.get(w.socketId);
         if (sock) {
@@ -174,7 +230,14 @@ function lobbyPayload(room) {
     return {
         players: scrubPlayersForHost(room.players),
         joined,
-        total: room.config.totalPlayers,
+        total: room.state === 'LOBBY' ? (room.config.maxPlayers || null) : (room.config.totalPlayers || room.players.length),
+        maxPlayers: room.config.maxPlayers || null,
+        config: {
+            spyCount: room.config.spyCount,
+            blankCount: room.config.blankCount,
+            maxPlayers: room.config.maxPlayers || null,
+            type: room.config.type
+        },
         counts,
         votes: room.votes,
         state: room.state
@@ -308,12 +371,89 @@ async function handleBlankGuessSubmit(roomId, playerId, guess) {
         }
     }
 }
+
+async function processElimination(room, eliminated, reason, options = {}) {
+    const { notifyPlayer = true, votingStatus = 'out', skipVotingComplete = false } = options;
+    if (!room || !eliminated) return;
+
+    const roomId = room.id;
+    const wasBlank = eliminated.role === 'Blank';
+    eliminated.isOut = true;
+    eliminated.pendingBlank = wasBlank;
+    if (notifyPlayer && eliminated.socketId) {
+        io.to(eliminated.socketId).emit('you_out', { reason });
+    }
+
+    const eliminatedInfo = scrubPlayersForHost([eliminated])[0];
+
+    if (wasBlank) {
+        resetVotes(room);
+        await persistRoom(room);
+        if (!skipVotingComplete) {
+            io.to(roomId).emit('voting_complete', {
+                status: votingStatus,
+                player: eliminatedInfo,
+                result: { result: 'blank_guess' },
+                counts: remainingCounts(room),
+                votes: room.votes,
+                players: scrubPlayersForHost(room.players)
+            });
+        }
+        await startBlankGuess(room, { onlyEliminated: true, extraEligibleIds: [eliminated.id] });
+        return;
+    }
+
+    const result = checkEndGame(room);
+    resetVotes(room);
+    await persistRoom(room);
+
+    if (!skipVotingComplete) {
+        io.to(roomId).emit('voting_complete', {
+            status: votingStatus,
+            player: eliminatedInfo,
+            result: result.result === 'blank_guess' ? undefined : result,
+            counts: remainingCounts(room),
+            votes: room.votes,
+            players: scrubPlayersForHost(room.players)
+        });
+    }
+
+    const finalRoles = scrubPlayersForHost(room.players);
+    if (result.result === 'civil_win') {
+        room.lastResult = 'civil_win';
+        await persistRoom(room);
+        io.to(roomId).emit('game_over', { result: 'civil_win', players: room.players.filter(p => p.role === 'Civilian'), finalRoles });
+    } else if (result.result === 'spy_win') {
+        room.lastResult = 'spy_win';
+        await persistRoom(room);
+        io.to(roomId).emit('game_over', { result: 'spy_win', players: room.players.filter(p => p.role === 'Spy'), finalRoles });
+    } else if (result.result === 'blank_guess') {
+        await startBlankGuess(room);
+    } else {
+        io.to(roomId).emit('update_lobby', lobbyPayload(room));
+    }
+}
 async function startGame(roomId) {
+    return startGameForSocket(roomId, null);
+}
+
+async function startGameForSocket(roomId, socket) {
     const room = ROOMS[roomId];
-    if (!room || room.state !== 'LOBBY') return;
-    if (room.players.length !== room.config.totalPlayers) return;
+    if (!room) return emitHostError(socket, 'room_not_found', 'Room not found');
+    if (room.state !== 'LOBBY') return emitHostError(socket, 'invalid_state', 'Game can only start from lobby');
+
+    const joined = room.players.length;
+    const spy = Number(room.config.spyCount);
+    const blank = Number(room.config.blankCount);
+    const civilians = joined - spy - blank;
+    if (joined < 3) return emitHostError(socket, 'not_enough_players', 'At least 3 players are required');
+    if (!Number.isInteger(spy) || spy < 1) return emitHostError(socket, 'invalid_spy_count', 'At least 1 spy is required');
+    if (!Number.isInteger(blank) || blank < 0) return emitHostError(socket, 'invalid_blank_count', 'Invalid blank count');
+    if (spy + blank >= joined || civilians < 1) return emitHostError(socket, 'invalid_role_total', 'Spies and blanks must leave at least 1 civilian');
+    if (spy >= civilians + blank) return emitHostError(socket, 'start_condition_met', 'Role counts already meet an end-game condition');
 
     room.lastResult = null;
+    room.config.totalPlayers = joined;
     room.usedQuestionIds = room.usedQuestionIds || [];
     room.questionHistory = room.questionHistory || [];
     const question = pickQuestion(room.config.type, room.usedQuestionIds);
@@ -347,14 +487,13 @@ async function startGame(roomId) {
     console.log(`Game started for room ${roomId}`);
 
     const counts = remainingCounts(room);
-        io.to(roomId).emit('game_started', {
-            players: scrubPlayersForAudience(room.players),
-            roles: scrubPlayersForHost(room.players),
-            counts,
-            total: room.config.totalPlayers
-        });
+    io.to(roomId).emit('game_started', {
+        players: scrubPlayersForAudience(room.players),
+        counts,
+        total: room.config.totalPlayers
+    });
 
-        room.players.forEach(p => {
+    room.players.forEach(p => {
         io.to(p.socketId).emit('your_word', { word: p.word || '' });
     });
     room.votes = { counts: {}, voters: [] };
@@ -376,23 +515,19 @@ app.post('/api/upload-question-bank', upload.single('file'), (req, res) => {
 // 1. Create Room (Host)
 app.post('/api/create-room', async (req, res) => {
     try {
-        const { type, totalPlayers, spyCount, blankCount } = req.body;
-        const total = Number(totalPlayers);
-        const spy = Number(spyCount);
-        const blank = Number(blankCount);
+        const { type, totalPlayers, maxPlayers, spyCount, blankCount } = req.body;
+        const cap = parseOptionalPositiveInt(maxPlayers ?? totalPlayers);
+        const spy = parseNonNegativeInt(spyCount, 1);
+        const blank = parseNonNegativeInt(blankCount, 0);
 
-        // Logic Validation
-        if (!Number.isInteger(total) || total < 3) return res.status(400).json({ error: 'Invalid player count' });
-        const maxSpy = Math.floor(total / 2);
-        const maxBlank = Math.floor(total / 2) - spy;
-
-        if (spy < 1 || spy > maxSpy) return res.status(400).json({ error: 'Invalid spy count' });
-        if (blank < 0 || blank > maxBlank) return res.status(400).json({ error: 'Invalid blank count' });
+        if (Number.isNaN(cap) || (cap !== null && cap < 3)) return res.status(400).json({ error: 'Invalid max player count' });
+        if (Number.isNaN(spy)) return res.status(400).json({ error: 'Invalid spy count' });
+        if (Number.isNaN(blank)) return res.status(400).json({ error: 'Invalid blank count' });
 
         const roomId = uuidv4().substring(0, 6).toUpperCase();
         ROOMS[roomId] = {
             id: roomId,
-            config: { totalPlayers: total, spyCount: spy, blankCount: blank, type: type || 'all' },
+            config: { totalPlayers: null, maxPlayers: cap, spyCount: spy, blankCount: blank, type: type || 'all' },
             question: null,
             players: [],
             state: 'LOBBY', // LOBBY, GAMING, VOTING, FINISHED
@@ -400,7 +535,8 @@ app.post('/api/create-room', async (req, res) => {
             createdAt: new Date().toISOString(),
             usedQuestionIds: [],
             questionHistory: [],
-            lastResult: null
+            lastResult: null,
+            kickedPlayerIds: []
         };
 
         const joinUrl = `${req.protocol}://${req.headers.host}/join/${roomId}`;
@@ -409,7 +545,7 @@ app.post('/api/create-room', async (req, res) => {
         await persistRoom(ROOMS[roomId]);
         await attachWaitingPlayers(roomId, ROOMS[roomId]);
 
-        console.log(`Room created: ${roomId} type=${type || 'all'} players=${total} spies=${spy} blanks=${blank}`);
+        console.log(`Room created: ${roomId} type=${type || 'all'} max=${cap || 'none'} spies=${spy} blanks=${blank}`);
 
         res.json({ roomId, url: joinUrl, qr: qrDataUrl });
     } catch (err) {
@@ -420,7 +556,7 @@ app.post('/api/create-room', async (req, res) => {
 
 // 2. Join Room (Player landing)
 app.get('/join/:roomId', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'player.html'));
+    res.sendFile(appShellFile('player.html'));
 });
 
 // --- WEBSOCKETS ---
@@ -444,6 +580,26 @@ io.on('connection', (socket) => {
         console.log(`Host viewing lobby for room ${roomId} (viewers=${viewers.size})`);
     });
 
+    socket.on('update_lobby_config', async ({ roomId, spyCount, blankCount, maxPlayers }) => {
+        const room = ROOMS[roomId];
+        if (!room) return emitHostError(socket, 'room_not_found', 'Room not found');
+        if (room.state !== 'LOBBY') return emitHostError(socket, 'invalid_state', 'Lobby settings can only change before game start');
+
+        const spy = parseNonNegativeInt(spyCount, room.config.spyCount);
+        const blank = parseNonNegativeInt(blankCount, room.config.blankCount);
+        const cap = parseOptionalPositiveInt(maxPlayers);
+        if (Number.isNaN(spy)) return emitHostError(socket, 'invalid_spy_count', 'Invalid spy count');
+        if (Number.isNaN(blank)) return emitHostError(socket, 'invalid_blank_count', 'Invalid blank count');
+        if (Number.isNaN(cap) || (cap !== null && cap < 3)) return emitHostError(socket, 'invalid_max_players', 'Invalid max player count');
+        if (cap !== null && cap < room.players.length) return emitHostError(socket, 'max_below_joined', 'Max players cannot be less than joined players');
+
+        room.config.spyCount = spy;
+        room.config.blankCount = blank;
+        room.config.maxPlayers = cap;
+        await persistRoom(room);
+        io.to(roomId).emit('update_lobby', lobbyPayload(room));
+    });
+
     // Host manual resync: resend current state to everyone in the room
     socket.on('host_resync', ({ roomId }) => {
         const targetRoomId = roomId || socket.data.hostRoom;
@@ -456,7 +612,6 @@ io.on('connection', (socket) => {
         if (room.state === 'GAMING') {
             io.to(targetRoomId).emit('game_started', {
                 players: scrubPlayersForAudience(room.players),
-                roles: scrubPlayersForHost(room.players),
                 counts,
                 total: room.config.totalPlayers
             });
@@ -493,7 +648,8 @@ io.on('connection', (socket) => {
             return;
         }
 
-        let player = existingId ? room.players.find(p => p.id === existingId) : null;
+        const kickedIds = new Set(room.kickedPlayerIds || []);
+        let player = existingId && !kickedIds.has(existingId) ? room.players.find(p => p.id === existingId && !p.kicked) : null;
         if (player) {
             // Rejoin flow
             player.socketId = socket.id;
@@ -507,7 +663,6 @@ io.on('connection', (socket) => {
             if (room.state === 'GAMING') {
                 socket.emit('game_started', {
                     players: scrubPlayersForAudience(room.players),
-                    roles: scrubPlayersForHost(room.players),
                     counts,
                     total: room.config.totalPlayers
                 });
@@ -531,10 +686,11 @@ io.on('connection', (socket) => {
             return;
         }
 
-        if (room.players.length >= room.config.totalPlayers) return socket.emit('error', 'Room is full');
+        if (room.state !== 'LOBBY' && !existingId) return socket.emit('error', 'Game already started');
+        if (room.config.maxPlayers && room.players.length >= room.config.maxPlayers) return socket.emit('error', 'Room is full');
 
-        const playerId = existingId || uuidv4();
-        const safeName = (name || '').trim() || `玩家${room.players.length + 1}`;
+        const playerId = kickedIds.has(existingId) ? uuidv4() : (existingId || uuidv4());
+        const safeName = sanitizePlayerName(name, `玩家${room.players.length + 1}`);
         let imgPath = null;
 
         if (photoBase64) {
@@ -578,10 +734,6 @@ io.on('connection', (socket) => {
         socket.emit('joined', { playerId, roomId, name: safeName, image: imgPath });
         io.to(roomId).emit('update_lobby', lobbyPayload(room));
         console.log(`Player joined room ${roomId}: ${playerId}`);
-
-        if (room.players.length === room.config.totalPlayers && room.state === 'LOBBY') {
-            await startGame(roomId);
-        }
     });
 
     // Player leaves (manual)
@@ -590,36 +742,53 @@ io.on('connection', (socket) => {
         if (!room) return;
         const player = room.players.find(p => p.id === playerId);
         if (!player) return;
-        const wasBlank = player.role === 'Blank';
-        player.isOut = true;
-        player.pendingBlank = wasBlank;
-        const result = wasBlank ? { result: 'blank_guess' } : checkEndGame(room);
-        await persistRoom(room);
-        io.to(roomId).emit('update_lobby', lobbyPayload(room));
-        io.to(player.socketId).emit('you_out', { reason: 'left' });
-        const finalRoles = scrubPlayersForHost(room.players);
-        if (result.result === 'civil_win') {
-            room.lastResult = 'civil_win';
-            io.to(roomId).emit('game_over', { result: 'civil_win', players: room.players.filter(p => p.role === 'Civilian'), finalRoles });
-        } else if (result.result === 'spy_win') {
-            room.lastResult = 'spy_win';
-            io.to(roomId).emit('game_over', { result: 'spy_win', players: room.players.filter(p => p.role === 'Spy'), finalRoles });
-        } else if (result.result === 'blank_guess') {
-            await startBlankGuess(room, { onlyEliminated: true, extraEligibleIds: [player.id] });
+        if (room.state === 'LOBBY') {
+            room.players = room.players.filter(p => p.id !== playerId);
+            await persistRoom(room);
+            io.to(roomId).emit('update_lobby', lobbyPayload(room));
+        } else {
+            await processElimination(room, player, 'left', { skipVotingComplete: true });
         }
         console.log(`Player left room ${roomId}: ${playerId}`);
     });
 
+    socket.on('host_kick_player', async ({ roomId, playerId }) => {
+        const room = ROOMS[roomId];
+        if (!room) return emitHostError(socket, 'room_not_found', 'Room not found');
+        const player = room.players.find(p => p.id === playerId);
+        if (!player) return emitHostError(socket, 'player_not_found', 'Player not found');
+
+        const targetSocket = player.socketId ? io.sockets.sockets.get(player.socketId) : null;
+        room.kickedPlayerIds = room.kickedPlayerIds || [];
+        if (!room.kickedPlayerIds.includes(playerId)) room.kickedPlayerIds.push(playerId);
+        if (room.state === 'LOBBY') {
+            room.players = room.players.filter(p => p.id !== playerId);
+            await persistRoom(room);
+            if (targetSocket) {
+                targetSocket.emit('kicked', { roomId, reason: 'host_kick' });
+                targetSocket.leave(roomId);
+            }
+            io.to(roomId).emit('update_lobby', lobbyPayload(room));
+            return;
+        }
+
+        if (player.isOut) return emitHostError(socket, 'player_already_out', 'Player is already out');
+        player.kicked = true;
+        resetVotes(room);
+        if (targetSocket) targetSocket.emit('kicked', { roomId, reason: 'host_kick' });
+        await processElimination(room, player, 'host_kick', { votingStatus: 'kicked', skipVotingComplete: room.state !== 'VOTING' });
+    });
+
     // Host Starts Game
     socket.on('start_game', async ({ roomId }) => {
-        await startGame(roomId);
+        await startGameForSocket(roomId, socket);
     });
 
     // Voting Logic
     socket.on('start_vote', async ({ roomId }) => {
         console.log('start_vote');
         const room = ROOMS[roomId];
-        if (!room || room.state === 'FINISHED') return;
+        if (!room || room.state !== 'GAMING') return;
         room.state = 'VOTING';
         room.votes = { counts: {}, voters: [] };
         await persistRoom(room);
@@ -634,6 +803,8 @@ io.on('connection', (socket) => {
         if (!room || room.state !== 'VOTING') return;
         const voter = room.players.find(p => p.id === voterId && !p.isOut);
         if (!voter) return;
+        const target = room.players.find(p => p.id === targetId && !p.isOut);
+        if (!target) return;
         // prevent double vote
         if (room.votes?.voters?.includes(voterId)) return;
         room.votes.counts = room.votes.counts || {};
@@ -644,61 +815,26 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('vote_update', { voterId, targetId, votes: room.votes, players: scrubPlayersForHost(room.players) });
 
         const alivePlayers = room.players.filter(p => !p.isOut);
+        const lockedWinnerId = lockedVoteWinner(room);
         const allVoted = room.votes.voters.length >= alivePlayers.length;
 
-        if (allVoted) {
-            const tallyEntries = Object.entries(room.votes.counts).sort((a, b) => b[1] - a[1]);
+        if (lockedWinnerId || allVoted) {
+            const tallyEntries = sortedVoteEntries(room.votes);
             if (!tallyEntries.length) return;
             const [topId, topVotes] = tallyEntries[0];
             const second = tallyEntries[1];
             const tie = second && second[1] === topVotes;
 
-            if (tie) {
-                room.votes = { counts: {}, voters: [] };
+            if (!lockedWinnerId && tie) {
+                resetVotes(room);
                 room.state = 'GAMING';
                 await persistRoom(room);
                 const counts = remainingCounts(room);
                 return io.to(roomId).emit('voting_complete', { status: 'tie', counts, votes: room.votes, players: scrubPlayersForHost(room.players) });
             }
 
-            const eliminated = room.players.find(p => p.id === topId);
-            if (eliminated) {
-                const wasBlank = eliminated.role === 'Blank';
-                eliminated.isOut = true;
-                eliminated.pendingBlank = wasBlank;
-            }
-            const eliminatedInfo = scrubPlayersForHost([eliminated])[0];
-            if (eliminated?.socketId) {
-                io.to(eliminated.socketId).emit('you_out', { reason: 'voted_out' });
-            }
-
-            // If a Blank was eliminated, trigger blank guess immediately (include eliminated in eligible list)
-            if (eliminated?.role === 'Blank') {
-                room.votes = { counts: {}, voters: [] };
-                await persistRoom(room);
-                io.to(roomId).emit('voting_complete', { status: 'out', player: eliminatedInfo, result: { result: 'blank_guess' }, counts: remainingCounts(room), votes: room.votes, players: scrubPlayersForHost(room.players) });
-                await startBlankGuess(room, { onlyEliminated: true, extraEligibleIds: [eliminated.id] });
-                return;
-            }
-
-            const result = checkEndGame(room);
-            room.votes = { counts: {}, voters: [] };
-            await persistRoom(room);
-
-            io.to(roomId).emit('voting_complete', { status: 'out', player: eliminatedInfo, result: result.result === 'blank_guess' ? undefined : result, counts: remainingCounts(room), votes: room.votes, players: scrubPlayersForHost(room.players) });
-
-        const finalRoles = scrubPlayersForHost(room.players);
-        if (result.result === 'civil_win') {
-            room.lastResult = 'civil_win';
-            io.to(roomId).emit('game_over', { result: 'civil_win', players: room.players.filter(p => p.role === 'Civilian'), finalRoles });
-        } else if (result.result === 'spy_win') {
-            room.lastResult = 'spy_win';
-            io.to(roomId).emit('game_over', { result: 'spy_win', players: room.players.filter(p => p.role === 'Spy'), finalRoles });
-        } else if (result.result === 'blank_guess') {
-            await startBlankGuess(room);
-        } else {
-                room.state = 'GAMING';
-            }
+            const eliminated = room.players.find(p => p.id === (lockedWinnerId || topId));
+            await processElimination(room, eliminated, 'voted_out', { votingStatus: lockedWinnerId ? 'locked_out' : 'out' });
         }
     });
 
@@ -716,6 +852,7 @@ io.on('connection', (socket) => {
             room.votes = { counts: {}, voters: [] };
             room.state = 'LOBBY';
             room.lastResult = null;
+            room.config.totalPlayers = null;
             room.players.forEach(p => {
                 p.isOut = false;
                 p.role = null;
@@ -724,9 +861,6 @@ io.on('connection', (socket) => {
             });
             await persistRoom(room);
             io.to(roomId).emit('update_lobby', lobbyPayload(room));
-            if (room.players.length === room.config.totalPlayers) {
-                await startGame(roomId);
-            }
         } else {
             // move all players to waiting pool
             room.players.forEach(p => {
@@ -747,7 +881,8 @@ io.on('connection', (socket) => {
             const viewers = HOST_VIEWS.get(roomId);
             if (viewers) {
                 viewers.delete(socket.id);
-                if (viewers.size === 0) {
+                const room = ROOMS[roomId];
+                if (viewers.size === 0 && room && room.players.length === 0) {
                     removeRoom(roomId);
                 }
             }

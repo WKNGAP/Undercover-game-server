@@ -1,0 +1,10 @@
+node_modules/
+dist/
+test-results/
+data/Sections/
+
+npm-debug.log*
+*.log
+
+.env
+.env.*
