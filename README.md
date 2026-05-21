@@ -1,5 +1,7 @@
 # Undercover Party Game Server
 
+[繁體中文](README.zh-TW.md)
+
 Real-time web implementation of the *Undercover* / *谁是卧底* social deduction party game. Hosts create a lobby, invite players via QR code, tune roles before starting, and run each round completely inside a browser. The server handles word assignment, voting flow, host kicks, blank-player (“白板”) guessing, reconnections, and localization support.
 
 Latest highlights (v0.10.0):
@@ -83,16 +85,30 @@ The included `Dockerfile` builds a production image with Node 20 on Debian slim:
 
 ```bash
 # Build
-docker build -t undercover-game .
+docker build -t undercover:0.10.0 .
 
 # Run (map port + mount data for persistence)
 docker run --name undercover \
   -p 3000:3000 \
   -v $(pwd)/data:/app/data \
-  undercover-game
+  undercover:0.10.0
 ```
 
 Environment variables (e.g., `PORT=8080`) can be passed with `-e PORT=8080`. Mounting `data/` ensures question banks, room logs, and uploaded images survive container restarts.
+
+An example Compose file is included at `docker-compose.example.yml`:
+
+```bash
+cp docker-compose.example.yml docker-compose.yml
+docker compose up -d
+```
+
+Edit the volume source before running it on a server. For example:
+
+```yaml
+volumes:
+  - /mnt/UbuntuROCm/undercover/data:/app/data
+```
 
 ## Deploying without Docker
 

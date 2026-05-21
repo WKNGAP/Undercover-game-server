@@ -3,6 +3,7 @@
 ## v0.10.0 (latest)
 - Rebuilt the host and player web UI with React + Vite while keeping the existing Express/Socket.IO APIs stable.
 - Changed room flow to lobby-first manual start: hosts can create a room, show the QR code immediately, adjust spy/blank/max-player settings, then start when ready.
+- Added Docker Compose example deployment file and Traditional Chinese README.
 - Added host language selection for English and Chinese using the shared i18n dictionary.
 - Added host kick controls for lobby and in-game players, including clean kicked-player session reset.
 - Added early vote completion when the current leader can no longer be caught by remaining votes.

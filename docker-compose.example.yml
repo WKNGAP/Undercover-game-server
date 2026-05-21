@@ -1,0 +1,15 @@
+version: "3.9"
+
+services:
+  undercover:
+    image: undercover:0.10.0
+    restart: unless-stopped
+    container_name: undercover
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+    volumes:
+      # Change the left side to your server's persistent data path.
+      # Keep /app/data as the container path.
+      - ./data:/app/data
